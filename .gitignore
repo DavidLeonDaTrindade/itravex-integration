@@ -1,0 +1,8 @@
+/vendor/
+/node_modules/
+/storage/*.key
+/storage/logs/
+/storage/framework/
+.env
+public/hot
+public/storage
