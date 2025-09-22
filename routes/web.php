@@ -6,6 +6,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ItravexReservationController;
 use App\Http\Controllers\LogViewerController;
 use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\AreaSearchController;
+
 
 
 Route::get('/', fn() => view('welcome'))->name('home');
@@ -62,14 +64,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/logs/itravex/download', [LogViewerController::class, 'download'])
         ->name('logs.itravex.download');
 
-    Route::middleware(['auth','throttle:6,1'])->post('email/verification-notification', function () {
-    return back()->with('status', 'Email verification is disabled.');
-})->name('verification.send');	
+    Route::middleware(['auth', 'throttle:6,1'])->post('email/verification-notification', function () {
+        return back()->with('status', 'Email verification is disabled.');
+    })->name('verification.send');
     Route::middleware('auth')->group(function () {
-    // Cambiar contraseña autenticado
-    Route::put('password', [PasswordController::class, 'update'])
-        ->name('password.update');
-});
+        // Cambiar contraseña autenticado
+        Route::put('password', [PasswordController::class, 'update'])
+            ->name('password.update');
+    });
+
+    Route::get('/areas', [AreaSearchController::class, 'search'])
+    ->middleware('throttle:30,1');
 });
 
 require __DIR__ . '/auth.php';
