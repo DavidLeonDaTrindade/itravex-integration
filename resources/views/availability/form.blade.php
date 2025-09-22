@@ -63,7 +63,7 @@
 
               <div>
                 <label for="numrst" class="block text-sm font-medium text-slate-700">Resultados por página (numrst)</label>
-                <input id="numrst" type="number" name="numrst" min="1" max="200" value="{{ old('numrst', 20) }}" placeholder="20"
+                <input id="numrst" type="number" name="numrst" min="1" max="500" value="{{ old('numrst', 20) }}" placeholder="20"
                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
               </div>
 

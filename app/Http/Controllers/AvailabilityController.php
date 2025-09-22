@@ -29,7 +29,7 @@ class AvailabilityController extends Controller
             'mode'         => 'sometimes|in:fast,full',
             // Opcionales
             'timeout'      => 'nullable|integer|min:1000|max:60000',
-            'numrst'       => 'nullable|integer|min:1|max:200',
+            'numrst'       => 'nullable|integer|min:1|',
             'batch_size'   => 'nullable|integer|min:1|max:200',
             'per_page'     => 'sometimes|integer|min:1|max:500',
             // Credenciales/endpoint opcionales
