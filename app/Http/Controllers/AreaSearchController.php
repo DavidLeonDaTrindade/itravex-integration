@@ -31,4 +31,25 @@ class AreaSearchController extends Controller
 
         return response()->json(['items' => $rows]);
     }
+    // NUEVO: hoteles por zona
+    public function hotels(Request $request, string $code)
+    {
+        // Valida que sea A-xxxx
+        $request->merge(['code' => $code]);
+        $request->validate([
+            'code' => ['required', 'string', 'regex:/^A-\d+$/'],
+        ]);
+
+        // Trae los hoteles cuya zone_code == A-xxxx
+        $rows = DB::table('hotels') // <- si tu tabla tiene otro nombre, cámbialo aquí
+            ->select(['codser', 'name'])
+            ->where('zone_code', $code)
+            ->orderBy('name')        // o por codser si prefieres
+            ->get();
+
+        return response()->json([
+            'count' => $rows->count(),
+            'items' => $rows,
+        ]);
+    }
 }

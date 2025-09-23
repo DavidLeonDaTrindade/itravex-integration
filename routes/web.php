@@ -74,7 +74,11 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::get('/areas', [AreaSearchController::class, 'search'])
-    ->middleware('throttle:30,1');
+        ->middleware('throttle:30,1');
+
+    Route::get('/areas/{code}/hotels', [AreaSearchController::class, 'hotels'])
+        ->middleware('throttle:30,1')
+        ->where('code', 'A-\d+');
 });
 
 require __DIR__ . '/auth.php';
