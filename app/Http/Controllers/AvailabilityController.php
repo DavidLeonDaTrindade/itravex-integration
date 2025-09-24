@@ -57,7 +57,7 @@ class AvailabilityController extends Controller
         $numrst     = $request->filled('numrst')  ? (int)$request->input('numrst')  : null;
         $batchSize  = $request->filled('batch_size') ? (int)$request->input('batch_size') : 50;
 
-        // UI per_page (si no viene, usamos numrst; si tampoco, 20)
+        // UI per_page
         $perPage = (int) $request->input('per_page', $request->input('numrst', 20));
         $perPage = max(1, min($perPage, 500));
 
@@ -79,8 +79,8 @@ class AvailabilityController extends Controller
         $fecini = date('d/m/Y', strtotime($validated['fecini']));
         $fecfin = date('d/m/Y', strtotime($validated['fecfin']));
 
-        // UI: $perPage visibles; bloque interno = 200 codser consultados en lotes de $batchSize
-        $poolSize    = 200;
+        // Pool “histórico” (lo sigo dejando en perf, pero ya no limita el branch codser)
+        $poolSize    = 300;
         $currentPage = max(1, (int)$request->input('page', 1));
 
         $perf = [
@@ -109,220 +109,162 @@ class AvailabilityController extends Controller
             $manualCodes = array_values(array_filter(array_unique(array_map('trim', $raw)), fn($v) => $v !== ''));
         }
 
-        // Varias páginas UI dentro de un bloque de 200
-        $uiPagesPerBlock   = (int) ceil($poolSize / $perPage);
-        $blockIndex        = intdiv($currentPage - 1, $uiPagesPerBlock);
-        $offsetWithinBlock = (($currentPage - 1) % $uiPagesPerBlock) * $perPage;
-        $offsetCodes       = $blockIndex * $poolSize;
-        $perf['pool_offset'] = $offsetCodes;
+        // ¿Usar modo ZONA nativo del proveedor?
+        $usingZoneMode = empty($manualCodes) && !empty($validated['codzge']);
 
-        // Obtener pool de codser
-        $t_db0 = microtime(true);
-        if (!empty($manualCodes)) {
-            if (!empty($validated['codzge'])) {
-                $manualCodes = \App\Models\Hotel::where('zone_code', $validated['codzge'])
-                    ->whereIn('codser', $manualCodes)
-                    ->pluck('codser')->all();
-            }
-            $zoneTotalHotels = count($manualCodes);
-            $codesPool       = array_slice($manualCodes, $offsetCodes, $poolSize);
-        } else {
-            $zoneTotalHotels = \App\Models\Hotel::where('zone_code', $validated['codzge'])->count();
-            $t_db1 = microtime(true);
-            $codesPool = \App\Models\Hotel::where('zone_code', $validated['codzge'])
-                ->orderBy('name')
-                ->skip($offsetCodes)
-                ->take($poolSize)
-                ->pluck('codser')
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
-            $perf['db_ms'] += (int) round((microtime(true) - $t_db1) * 1000);
-        }
-        $perf['db_ms'] += (int) round((microtime(true) - $t_db0) * 1000);
-
-        // Si no hay más códigos en este bloque
-        if (empty($codesPool)) {
-            $empty = new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, $currentPage, ['path' => url()->current()]);
-            return view('availability.results', [
-                'hotels'                     => $empty,
-                'totalRooms'                 => 0,
-                'internalRateCount'          => 0,
-                'externalRateCount'          => 0,
-                'externalALWRates'           => 0,
-                'providerRateCounts'         => [],
-                'hotelRateCounts'            => [],
-                'hotelRateCountsPage'        => [],
-                'providerHotelCounts'        => [],
-                'providerHotelCountsPage'    => [],
-                'httpMeta' => [
-                    'status'            => 200,
-                    'elapsed_ms'        => 0,
-                    'size_decompressed' => 0,
-                    'content_length'    => '—',
-                    'content_encoding'  => '—',
-                    'transfer_encoding' => '—',
-                    'connection'        => '—',
-                    'content_type'      => '—',
-                    'date'              => null,
-                    'total_ms_pool'     => '—',
-                    'total_ms'          => '—',
-                    'ttfb_ms'           => '—',
-                    'download_ms'       => '—',
-                    'connect_ms'        => '—',
-                    'ssl_ms'            => '—',
-                    'namelookup_ms'     => '—',
-                    'primary_ip'        => '—',
-                ],
-                'perf' => array_merge($perf, [
-                    'http_ms'      => 0,
-                    'parse_ms'     => 0,
-                    'aggregate_ms' => 0,
-                    'total_ms'     => (int) round((microtime(true) - $t_app0) * 1000),
-                    'peak_mem_mb'  => round(memory_get_peak_usage(true) / 1048576, 1),
-                    'hotels_page'  => 0,
-                    'rooms_page'   => 0,
-                ]),
-                'selectionNote'      => !empty($manualCodes)
-                    ? "{$perPage} visibles — consultados en lotes de {$batchSize} (códigos manuales)"
-                    : "{$perPage} visibles — consultados en lotes de {$batchSize} (modo zona por BD)",
-                'zoneTotalHotels'    => $zoneTotalHotels,
-                'effective' => [
-                    'codnac'       => $codnac,
-                    'timeout_ms'   => $timeoutMs,
-                    'per_page'     => $perPage,
-                    'from_zone'    => $validated['codzge'] ?? null,
-                    'manual_codes' => !empty($manualCodes),
-                    'zone_total'   => $zoneTotalHotels,
-                ],
-                // Para la vista (sin datos)
-                'providers'           => [],
-                'hotelProviderMatrix' => [],
-            ]);
-        }
-
-        // Concurrency/Timeouts
-        $targetHotels   = $offsetWithinBlock + $perPage;
+        // Concurrency/Timeouts comunes
         $maxConcurrency = $complete ? 8  : 10;
         $connectTimeout = $complete ? 1.0 : 0.7;
         $requestTimeout = $complete ? 8.0 : 3.5;
         $earlyStop      = ($mode !== 'full');
 
+        // margen +2s para evitar cURL 28 cuando timeoutMs es justo
         if ($timeoutMs) {
-            $requestTimeout = max($requestTimeout, min(60.0, ($timeoutMs / 1000.0) + 1.0));
+            $requestTimeout = max($requestTimeout, min(60.0, ($timeoutMs / 1000.0) + 2.0));
         }
 
         $endpoint = $cfg['endpoint'];
-        $client   = new \GuzzleHttp\Client([
-            'headers' => [
-                'Accept-Encoding' => 'gzip, deflate, br',
-                'Connection'      => 'keep-alive',
-                'Content-Type'    => 'application/xml',
-            ],
-            'curl' => [
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
-            ],
-        ]);
-        // XML multi
-        $buildXmlMulti = function (array $codsers) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
-            $codserLines = implode("\n", array_map(fn($c) => "  <codser>{$c}</codser>", $codsers));
-            $traduc      = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>\n  <traduc>codral#</traduc>";
-            $numrstXml   = $numrst ? "  <numrst>{$numrst}</numrst>\n" : "";
-            $codnacXml   = $codnac ? "  <codnac>{$codnac}</codnac>\n" : "";
-            return <<<XML
-<DisponibilidadHotelPeticion>
-  <ideses>{$sessionId}</ideses>
-  <codtou>{$cfg['codtou']}</codtou>
-  <fecini>{$fecini}</fecini>
-  <fecfin>{$fecfin}</fecfin>
-{$codserLines}
-  <distri id="1">
-    <numuni>1</numuni>
-    <numadl>{$validated['numadl']}</numadl>
-  </distri>
-{$traduc}
-{$codnacXml}  <timout>{$timeoutMs}</timout>
-{$numrstXml}  <indpag>0</indpag>
-  <chkscm>S</chkscm>
-</DisponibilidadHotelPeticion>
-XML;
-        };
-        $firstPayload = !empty($codesPool) ? $buildXmlMulti(array_slice($codesPool, 0, $batchSize)) : null;
 
-        // Métricas/red
+        // Métricas/red comunes
         $reqMetrics   = [];
         $firstHeaders = null;
         $totalBytes   = 0;
 
+        // Contenedores
         $allHotels            = [];
         $totalRooms           = 0;
         $internalRateCount    = 0;
         $externalRateCount    = 0;
         $externalALWRates     = 0;
         $providerRateCounts   = [];
+        $hotelRateCounts      = [];
+        $providerHotelSets    = [];
 
-        $hotelRateCounts     = [];
-        $providerHotelSets   = [];
+        // NUEVO: contenedores para payloads
+        $allPayloads   = [];   // todos los XML enviados
+        $payloadMeta   = [];   // metadatos de batches y totales
+        $payloadPreview = null; // preview ampliado (hasta 5)
+        $firstPayload = null;  // compat con la vista actual
+        $zoneTotalHotels = 0;
 
-        $receivedHotels = 0;
-        $stop = false;
+        // Helper retry (usado en modo zona)
+        $doPostWithRetry = function (\GuzzleHttp\Client $client, string $endpoint, string $body, array &$reqMetrics, int $maxRetries = 2) {
+            $attempt = 0;
+            $delayMs = 300;
+            while (true) {
+                try {
+                    return $client->post($endpoint, [
+                        'body'        => $body,
+                        'http_errors' => false,
+                        'on_stats'    => function (\GuzzleHttp\TransferStats $stats) use (&$reqMetrics) {
+                            $hs = $stats->getHandlerStats() ?? [];
+                            $total      = (float)($hs['total_time'] ?? 0);
+                            $namelookup = (float)($hs['namelookup_time'] ?? 0);
+                            $connect    = (float)($hs['connect_time'] ?? 0);
+                            $ssl        = (float)($hs['appconnect_time'] ?? 0);
+                            $ttfb       = (float)($hs['starttransfer_time'] ?? 0);
+                            $reqMetrics[] = [
+                                'total_ms'      => (int) round($total * 1000),
+                                'namelookup_ms' => (int) round($namelookup * 1000),
+                                'connect_ms'    => (int) round($connect * 1000),
+                                'ssl_ms'        => (int) round($ssl * 1000),
+                                'ttfb_ms'       => (int) round($ttfb * 1000),
+                                'download_ms'   => (int) round(($total - $ttfb) * 1000),
+                                'primary_ip'    => $hs['primary_ip'] ?? null,
+                                'http_code'     => $hs['http_code'] ?? null,
+                            ];
+                        },
+                    ]);
+                } catch (\GuzzleHttp\Exception\ConnectException | \GuzzleHttp\Exception\TransferException $e) {
+                    if ($attempt >= $maxRetries) throw $e;
+                    usleep($delayMs * 1000);
+                    $delayMs = min(1500, (int)($delayMs * 2));
+                    $attempt++;
+                }
+            }
+        };
 
-        // Peticiones por lotes
-        $chunks = array_chunk($codesPool, $batchSize);
-        $perf['batches_sent'] = count($chunks);
+        // ---------- MODO ZONA nativo ----------
+        if ($usingZoneMode) {
+            $t_db0 = microtime(true);
+            $zoneTotalHotels = \App\Models\Hotel::where('zone_code', $validated['codzge'])->count();
+            $perf['db_ms'] += (int) round((microtime(true) - $t_db0) * 1000);
 
-        $promises = [];
-        foreach ($chunks as $i => $chunk) {
-            $promises["batch_{$i}"] = $client->postAsync($endpoint, [
-                'body'            => $buildXmlMulti($chunk),
-                'connect_timeout' => $connectTimeout,
+            $buildXmlZone = function (int $indpag) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
+                $traduc    = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>";
+                $numrstXml = $numrst ? "  <numrst>{$numrst}</numrst>\n" : "  <numrst>200</numrst>\n";
+                $codnacXml = $codnac ? "  <codnac>{$codnac}</codnac>\n" : "";
+                $codzge    = e($validated['codzge']);
+                return <<<XML
+<DisponibilidadHotelPeticion>
+  <ideses>{$sessionId}</ideses>
+  <codtou>{$cfg['codtou']}</codtou>
+  <fecini>{$fecini}</fecini>
+  <fecfin>{$fecfin}</fecfin>
+  <codzge>{$codzge}</codzge>
+  <distri id="1">
+    <numuni>1</numuni>
+    <numadl>{$validated['numadl']}</numadl>
+  </distri>
+{$traduc}
+{$codnacXml}  <timout>{$timeoutMs}</timout>
+{$numrstXml}  <indpag>{$indpag}</indpag>
+  <chkscm>S</chkscm>
+</DisponibilidadHotelPeticion>
+XML;
+            };
+
+            $client = new \GuzzleHttp\Client([
+                'headers' => [
+                    'Accept-Encoding' => 'gzip, deflate, br',
+                    'Connection'      => 'keep-alive',
+                    'Content-Type'    => 'application/xml',
+                ],
+                'curl'            => [CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0],
                 'timeout'         => $requestTimeout,
-                'on_stats'        => function (\GuzzleHttp\TransferStats $stats) use (&$reqMetrics) {
-                    $hs = $stats->getHandlerStats() ?? [];
-                    $total      = (float)($hs['total_time'] ?? 0);
-                    $namelookup = (float)($hs['namelookup_time'] ?? 0);
-                    $connect    = (float)($hs['connect_time'] ?? 0);
-                    $ssl        = (float)($hs['appconnect_time'] ?? 0);
-                    $ttfb       = (float)($hs['starttransfer_time'] ?? 0);
-                    $reqMetrics[] = [
-                        'total_ms'      => (int) round($total * 1000),
-                        'namelookup_ms' => (int) round($namelookup * 1000),
-                        'connect_ms'    => (int) round($connect * 1000),
-                        'ssl_ms'        => (int) round($ssl * 1000),
-                        'ttfb_ms'       => (int) round($ttfb * 1000),
-                        'download_ms'   => (int) round(($total - $ttfb) * 1000),
-                        'primary_ip'    => $hs['primary_ip'] ?? null,
-                        'http_code'     => $hs['http_code'] ?? null,
-                    ];
-                },
+                'connect_timeout' => $connectTimeout,
             ]);
-        }
 
-        $t_http0 = microtime(true);
-        $each = new \GuzzleHttp\Promise\EachPromise($promises, [
-            'concurrency' => $maxConcurrency,
-            'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets, &$receivedHotels, $targetHotels, $earlyStop, &$stop) {
-                if ($stop) return;
+            $indpag = 0;
+            $receivedHotels = 0;
+            $t_http0 = microtime(true);
+            $note = null;
+
+            do {
+                $xmlBody = $buildXmlZone($indpag);
+                // NUEVO: guardar cada payload para el preview/listado
+                $allPayloads[] = $xmlBody;
+
+                try {
+                    $resp = $doPostWithRetry($client, $endpoint, $xmlBody, $reqMetrics, 2);
+                } catch (\GuzzleHttp\Exception\ConnectException | \GuzzleHttp\Exception\TransferException $e) {
+                    \Log::warning('itravex_zone_timeout_or_transfer', ['indpag' => $indpag, 'msg' => $e->getMessage(), 'timeout_s' => $requestTimeout]);
+                    if (!empty($allHotels)) {
+                        $note = 'Timeout del proveedor: resultados parciales.';
+                        break;
+                    }
+                    throw $e;
+                }
 
                 if ($firstHeaders === null) {
                     $firstHeaders = [
-                        'date'              => $response->getHeaderLine('Date') ?: null,
-                        'server'            => $response->getHeaderLine('Server') ?: '—',
-                        'content_type'      => $response->getHeaderLine('Content-Type') ?: '—',
-                        'content_encoding'  => $response->getHeaderLine('Content-Encoding') ?: '—',
-                        'transfer_encoding' => $response->getHeaderLine('Transfer-Encoding') ?: '—',
-                        'connection'        => $response->getHeaderLine('Connection') ?: '—',
+                        'date'              => $resp->getHeaderLine('Date') ?: null,
+                        'server'            => $resp->getHeaderLine('Server') ?: '—',
+                        'content_type'      => $resp->getHeaderLine('Content-Type') ?: '—',
+                        'content_encoding'  => $resp->getHeaderLine('Content-Encoding') ?: '—',
+                        'transfer_encoding' => $resp->getHeaderLine('Transfer-Encoding') ?: '—',
+                        'connection'        => $resp->getHeaderLine('Connection') ?: '—',
                     ];
                 }
 
-                $rawBody = (string) $response->getBody();
+                $rawBody = (string) $resp->getBody();
                 $totalBytes += strlen($rawBody);
-
                 $xml = @simplexml_load_string($rawBody, "SimpleXMLElement", LIBXML_NOCDATA);
-                if ($xml === false) return;
+                if ($xml === false) break;
 
+                $returned = 0;
                 foreach ($xml->infhot as $hotel) {
+                    $returned++;
                     $hotelId   = (string) $hotel['id'];
                     $codser    = (string) $hotel->codser;
                     $hotelName = (string) $hotel->nomser;
@@ -379,47 +321,302 @@ XML;
                     $hotelInfo['rooms'] = $rooms;
                     $allHotels[] = $hotelInfo;
                     $receivedHotels++;
-
-                    if ($earlyStop && $receivedHotels >= $targetHotels) {
-                        $stop = true;
-                        break;
-                    }
                 }
-            },
-            'rejected' => function ($reason, $batchKey) {
-                \Log::warning('itravex_batch_failed', ['batch' => $batchKey, 'reason' => (string)$reason]);
-            },
-        ]);
 
-        $each->promise()->wait();
-        $perf['http_ms'] = (int) round((microtime(true) - $t_http0) * 1000);
+                $expected = (int)($numrst ?: 200);
+                if ($returned < $expected) break;
+                $indpag++;
+                if ($earlyStop && $receivedHotels >= $perPage) break;
+            } while (true);
 
-        // Cancela pendientes si hubo early stop
-        if ($stop) {
-            foreach ($promises as $p) {
-                if (method_exists($p, 'cancel')) {
-                    try {
-                        $p->cancel();
-                    } catch (\Throwable $e) {
-                    }
-                }
+            $perf['http_ms'] = (int) round((microtime(true) - $t_http0) * 1000);
+            if (!empty($note)) {
+                $firstHeaders = $firstHeaders ?? [];
+                $firstHeaders['note'] = $note;
             }
+
+            // Meta para payloads (zona)
+            $payloadMeta = [
+                'mode'          => 'zone',
+                'batches'       => count($allPayloads),
+                'showing'       => 0, // se rellena más abajo al construir el preview
+                'codser_total'  => null, // en zona no mandamos codser
+                'zone'          => $validated['codzge'] ?? null,
+            ];
+        }
+        // ---------- MODO POR LISTA/CODSER (AHORA SIN PERDER NINGUNO) ----------
+        else {
+            $t_db0 = microtime(true);
+
+            // 1) Construir la lista COMPLETA de codser (sin skip/take)
+            if (!empty($manualCodes)) {
+                if (!empty($validated['codzge'])) {
+                    $manualCodes = \App\Models\Hotel::where('zone_code', $validated['codzge'])
+                        ->whereIn('codser', $manualCodes)
+                        ->pluck('codser')->all();
+                }
+                $codesPool = array_values(array_filter(array_unique($manualCodes)));
+            } else {
+                $codesPool = \App\Models\Hotel::where('zone_code', $validated['codzge'])
+                    ->orderBy('name')
+                    ->pluck('codser')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
+            $zoneTotalHotels = count($codesPool);
+            $perf['db_ms'] += (int) round((microtime(true) - $t_db0) * 1000);
+
+            if (empty($codesPool)) {
+                $empty = new \Illuminate\Pagination\LengthAwarePaginator([], 0, $perPage, $currentPage, ['path' => url()->current()]);
+                return view('availability.results', [
+                    'hotels'                     => $empty,
+                    'totalRooms'                 => 0,
+                    'internalRateCount'          => 0,
+                    'externalRateCount'          => 0,
+                    'externalALWRates'           => 0,
+                    'providerRateCounts'         => [],
+                    'hotelRateCounts'            => [],
+                    'hotelRateCountsPage'        => [],
+                    'providerHotelCounts'        => [],
+                    'providerHotelCountsPage'    => [],
+                    'httpMeta' => [
+                        'status'            => 200,
+                        'elapsed_ms'        => 0,
+                        'size_decompressed' => 0,
+                        'content_length'    => '—',
+                        'content_encoding'  => '—',
+                        'transfer_encoding' => '—',
+                        'connection'        => '—',
+                        'content_type'      => '—',
+                        'date'              => null,
+                        'total_ms_pool'     => '—',
+                        'total_ms'          => '—',
+                        'ttfb_ms'           => '—',
+                        'download_ms'       => '—',
+                        'connect_ms'        => '—',
+                        'ssl_ms'            => '—',
+                        'namelookup_ms'     => '—',
+                        'primary_ip'        => '—',
+                    ],
+                    'perf' => array_merge($perf, [
+                        'http_ms'      => 0,
+                        'parse_ms'     => 0,
+                        'aggregate_ms' => 0,
+                        'total_ms'     => (int) round((microtime(true) - $t_app0) * 1000),
+                        'peak_mem_mb'  => round(memory_get_peak_usage(true) / 1048576, 1),
+                        'hotels_page'  => 0,
+                        'rooms_page'   => 0,
+                    ]),
+                    'selectionNote'      => !empty($manualCodes)
+                        ? "{$perPage} visibles — consultados en lotes de 100 (códigos manuales)"
+                        : "{$perPage} visibles — consultados en lotes de 100 (modo codser por BD)",
+                    'zoneTotalHotels'    => $zoneTotalHotels,
+                    'effective' => [
+                        'codnac'       => $codnac,
+                        'timeout_ms'   => $timeoutMs,
+                        'per_page'     => $perPage,
+                        'from_zone'    => $validated['codzge'] ?? null,
+                        'manual_codes' => !empty($manualCodes),
+                        'zone_total'   => $zoneTotalHotels,
+                    ],
+                    'providers'           => [],
+                    'hotelProviderMatrix' => [],
+                    // NUEVO: payloads vacíos en este early return
+                    'firstPayload'  => null,
+                    'payloads'      => [],
+                    'payload_meta'  => ['mode' => 'codes', 'batches' => 0, 'showing' => 0, 'codser_total' => 0],
+                ]);
+            }
+
+            // 2) Peticiones en lotes de 100 codser (sin dejar ninguno)
+            $client = new \GuzzleHttp\Client([
+                'headers' => [
+                    'Accept-Encoding' => 'gzip, deflate, br',
+                    'Connection'      => 'keep-alive',
+                    'Content-Type'    => 'application/xml',
+                ],
+                'curl' => [CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0],
+            ]);
+
+            $buildXmlMulti = function (array $codsers) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
+                $codserLines = implode("\n", array_map(fn($c) => "  <codser>{$c}</codser>", $codsers));
+                $traduc      = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>\n  <traduc>codral#</traduc>";
+                $numrstXml   = $numrst ? "  <numrst>{$numrst}</numrst>\n" : "";
+                $codnacXml   = $codnac ? "  <codnac>{$codnac}</codnac>\n" : "";
+                return <<<XML
+<DisponibilidadHotelPeticion>
+  <ideses>{$sessionId}</ideses>
+  <codtou>{$cfg['codtou']}</codtou>
+  <fecini>{$fecini}</fecini>
+  <fecfin>{$fecfin}</fecfin>
+{$codserLines}
+  <distri id="1">
+    <numuni>1</numuni>
+    <numadl>{$validated['numadl']}</numadl>
+  </distri>
+{$traduc}
+{$codnacXml}  <timout>{$timeoutMs}</timout>
+{$numrstXml}  <indpag>0</indpag>
+  <chkscm>S</chkscm>
+</DisponibilidadHotelPeticion>
+XML;
+            };
+
+            // 🔢 Tamaño fijo 100 por requisito
+            $batchSizeCodser = 50;
+            $chunks = array_chunk($codesPool, $batchSizeCodser, false);
+            $perf['batches_sent'] = count($chunks);
+
+            // NUEVO: guardar TODOS los payloads para el preview
+            foreach ($chunks as $i => $chunk) {
+                $allPayloads[] = $buildXmlMulti($chunk);
+            }
+
+            // Ejecutamos TODOS los batches (para no dejar ninguno), con límite de concurrencia
+            $promises = [];
+            foreach ($allPayloads as $i => $payloadXml) {
+                $promises["batch_{$i}"] = $client->postAsync($endpoint, [
+                    'body'            => $payloadXml,
+                    'connect_timeout' => $connectTimeout,
+                    'timeout'         => $requestTimeout,
+                    'on_stats'        => function (\GuzzleHttp\TransferStats $stats) use (&$reqMetrics) {
+                        $hs = $stats->getHandlerStats() ?? [];
+                        $total      = (float)($hs['total_time'] ?? 0);
+                        $namelookup = (float)($hs['namelookup_time'] ?? 0);
+                        $connect    = (float)($hs['connect_time'] ?? 0);
+                        $ssl        = (float)($hs['appconnect_time'] ?? 0);
+                        $ttfb       = (float)($hs['starttransfer_time'] ?? 0);
+                        $reqMetrics[] = [
+                            'total_ms'      => (int) round($total * 1000),
+                            'namelookup_ms' => (int) round($namelookup * 1000),
+                            'connect_ms'    => (int) round($connect * 1000),
+                            'ssl_ms'        => (int) round($ssl * 1000),
+                            'ttfb_ms'       => (int) round($ttfb * 1000),
+                            'download_ms'   => (int) round(($total - $ttfb) * 1000),
+                            'primary_ip'    => $hs['primary_ip'] ?? null,
+                            'http_code'     => $hs['http_code'] ?? null,
+                        ];
+                    },
+                ]);
+            }
+
+            $t_http0 = microtime(true);
+            $each = new \GuzzleHttp\Promise\EachPromise($promises, [
+                'concurrency' => $maxConcurrency,
+                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets) {
+                    if ($firstHeaders === null) {
+                        $firstHeaders = [
+                            'date'              => $response->getHeaderLine('Date') ?: null,
+                            'server'            => $response->getHeaderLine('Server') ?: '—',
+                            'content_type'      => $response->getHeaderLine('Content-Type') ?: '—',
+                            'content_encoding'  => $response->getHeaderLine('Content-Encoding') ?: '—',
+                            'transfer_encoding' => $response->getHeaderLine('Transfer-Encoding') ?: '—',
+                            'connection'        => $response->getHeaderLine('Connection') ?: '—',
+                        ];
+                    }
+                    $rawBody = (string) $response->getBody();
+                    $totalBytes += strlen($rawBody);
+
+                    $xml = @simplexml_load_string($rawBody, "SimpleXMLElement", LIBXML_NOCDATA);
+                    if ($xml === false) return;
+
+                    foreach ($xml->infhot as $hotel) {
+                        $hotelId   = (string) $hotel['id'];
+                        $codser    = (string) $hotel->codser;
+                        $hotelName = (string) $hotel->nomser;
+
+                        $hotelInfo = [
+                            'name'              => $hotelName,
+                            'category'          => (string) $hotel->codsca,
+                            'code'              => $codser,
+                            'currency'          => (string) $hotel->coddiv,
+                            'price'             => (float) $hotel->impbas,
+                            'zone'              => (string) $hotel->codzge,
+                            'hotel_internal_id' => $hotelId,
+                        ];
+
+                        $rooms = [];
+                        foreach ($hotel->infhab as $room) {
+                            $isInternal = isset($room->codtrf) || isset($room->inftrf);
+                            $codtou     = (string) $room->codtou;
+
+                            $providerRateCounts[$codtou] = ($providerRateCounts[$codtou] ?? 0) + 1;
+
+                            if ($codtou !== '') {
+                                if (!isset($providerHotelSets[$codtou])) $providerHotelSets[$codtou] = [];
+                                $providerHotelSets[$codtou][$codser] = true;
+                            }
+
+                            if (!isset($hotelRateCounts[$codser])) {
+                                $hotelRateCounts[$codser] = ['name' => $hotelName ?: $codser, 'count' => 0];
+                            }
+                            $hotelRateCounts[$codser]['count']++;
+
+                            if ($isInternal) $internalRateCount++;
+                            else {
+                                $externalRateCount++;
+                                if ($codtou === 'ALW') $externalALWRates++;
+                            }
+
+                            $price = (float) $room->impnoc;
+                            if ($price == 0 && isset($room->impcom)) $price = (float) $room->impcom;
+
+                            $rooms[] = [
+                                'room_type'        => (string) $room->codsmo,
+                                'room_code'        => (string) $room->codcha,
+                                'board'            => (string) $room->codral,
+                                'price_per_night'  => $price,
+                                'availability'     => (string) $room->cupinv,
+                                'room_internal_id' => (string) $room['id'],
+                                'is_internal'      => $isInternal,
+                                'codtou'           => $codtou,
+                            ];
+                            $totalRooms++;
+                        }
+
+                        $hotelInfo['rooms'] = $rooms;
+                        $allHotels[] = $hotelInfo;
+                    }
+                },
+                'rejected' => function ($reason, $batchKey) {
+                    \Log::warning('itravex_batch_failed', ['batch' => $batchKey, 'reason' => (string)$reason]);
+                },
+            ]);
+
+            $each->promise()->wait();
+            $perf['http_ms'] = (int) round((microtime(true) - $t_http0) * 1000);
+
+            // Meta para payloads (códigos)
+            $payloadMeta = [
+                'mode'          => 'codes',
+                'batches'       => count($allPayloads),
+                'showing'       => 0, // se rellena más abajo al construir el preview
+                'codser_total'  => count($codesPool),
+                'zone'          => $validated['codzge'] ?? null,
+            ];
         }
 
+        // ---------- TAIL COMÚN: ordenar, paginar, métricas y salida ----------
         if (!empty($allHotels)) {
             usort($allHotels, fn($a, $b) => ($a['price'] <=> $b['price']) ?: strcmp($a['name'], $b['name']));
         }
 
+        if (!isset($offsetWithinBlock)) $offsetWithinBlock = 0;
+
+        // Paginar sobre TODO lo recuperado
         $availableTotal = count($allHotels);
         $lastPage = max(1, (int) ceil($availableTotal / $perPage));
         if ($currentPage > $lastPage) {
             $currentPage = $lastPage;
-            $offsetWithinBlock = (($currentPage - 1) % $uiPagesPerBlock) * $perPage;
         }
 
-        $visibleHotels = array_slice($allHotels, $offsetWithinBlock, $perPage);
+        $offset = ($currentPage - 1) * $perPage;
+        $visibleHotels = array_slice($allHotels, $offset, $perPage);
 
-        // Tarifas por hotel — SOLO página actual
+        // Conteos de la página
         $hotelRateCountsPage = [];
         foreach ($visibleHotels as $h) {
             $code = $h['code'];
@@ -435,9 +632,7 @@ XML;
         }
 
         $providerHotelCounts = [];
-        foreach ($providerHotelSets as $prov => $set) {
-            $providerHotelCounts[$prov] = count($set);
-        }
+        foreach ($providerHotelSets as $prov => $set) $providerHotelCounts[$prov] = count($set);
         arsort($providerHotelCounts);
 
         $providerHotelSetsPage = [];
@@ -450,16 +645,12 @@ XML;
             }
         }
         $providerHotelCountsPage = [];
-        foreach ($providerHotelSetsPage as $prov => $set) {
-            $providerHotelCountsPage[$prov] = count($set);
-        }
+        foreach ($providerHotelSetsPage as $prov => $set) $providerHotelCountsPage[$prov] = count($set);
         arsort($providerHotelCountsPage);
-
-        $paginatorTotal = $availableTotal;
 
         $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
             collect($visibleHotels)->values(),
-            $paginatorTotal,
+            $availableTotal,
             $perPage,
             $currentPage,
             ['path' => url()->current()]
@@ -472,9 +663,7 @@ XML;
             return count($vals) ? (int) round(array_sum($vals) / count($vals)) : null;
         };
         $firstNonNull = function (array $arr, string $k) {
-            foreach ($arr as $row) {
-                if (!empty($row[$k])) return $row[$k];
-            }
+            foreach ($arr as $row) if (!empty($row[$k])) return $row[$k];
             return '—';
         };
 
@@ -502,65 +691,62 @@ XML;
             'ssl_ms'            => $avg($reqMetrics, 'ssl_ms')        ?? '—',
             'namelookup_ms'     => $avg($reqMetrics, 'namelookup_ms') ?? '—',
             'primary_ip'        => $firstNonNull($reqMetrics, 'primary_ip'),
+            'note'              => $firstHeaders['note'] ?? null,
         ];
 
-        /*
-    |--------------------------------------------------------------------------
-    |  MATRIZ HOTEL × PROVEEDOR + EXPORT CSV
-    |--------------------------------------------------------------------------
-    | scope=page (por defecto) usa $visibleHotels
-    | scope=block usa $allHotels (todo el bloque interno consultado)
-    */
+        // NUEVO: construir preview ampliado (concatena hasta 5 payloads con separadores)
+        if (!empty($allPayloads)) {
+            $maxShow = 5;
+            $toShow = array_slice($allPayloads, 0, $maxShow);
+            $parts = [];
+            $total = count($allPayloads);
+            foreach ($toShow as $i => $px) {
+                $idx = $i + 1;
+                $parts[] = "<!-- ===== BATCH {$idx}/{$total} ===== -->\n" . $px;
+            }
+            $payloadPreview = implode("\n\n", $parts);
+            $payloadMeta['showing'] = count($toShow);
+        } else {
+            $payloadPreview = null;
+            if (empty($payloadMeta)) {
+                $payloadMeta = ['mode' => $usingZoneMode ? 'zone' : 'codes', 'batches' => 0, 'showing' => 0, 'codser_total' => null, 'zone' => $validated['codzge'] ?? null];
+            }
+        }
+
+        // Compat: la vista actual espera 'firstPayload'. Le daremos el preview ampliado.
+        $firstPayload = $payloadPreview;
+
+        // Matriz proveedor
         $scope = $request->query('scope', 'page') === 'block' ? 'block' : 'page';
         $hotelsForMatrix = ($scope === 'block') ? $allHotels : $visibleHotels;
 
-        // 1) Detectar proveedores presentes (dinámico)
         $providers = array_keys($providerRateCounts ?? []);
         sort($providers);
-
-        // 2) Construir matriz
         $hotelProviderMatrix = [];
         foreach ($hotelsForMatrix as $h) {
-            // inicializar con 0 por proveedor conocido
             $rowCounts = array_fill_keys($providers, 0);
-
             foreach ($h['rooms'] as $room) {
                 $p = (string) ($room['codtou'] ?? '');
                 if ($p === '') continue;
-
-                // si aparece un proveedor nuevo no visto antes
                 if (!array_key_exists($p, $rowCounts)) {
                     $rowCounts[$p] = 0;
-                    if (!in_array($p, $providers, true)) {
-                        $providers[] = $p;
-                    }
+                    if (!in_array($p, $providers, true)) $providers[] = $p;
                 }
                 $rowCounts[$p]++;
             }
-
-            $hotelProviderMatrix[] = [
-                'name'   => $h['name'],
-                'code'   => $h['code'],
-                'counts' => $rowCounts,
-            ];
+            $hotelProviderMatrix[] = ['name' => $h['name'], 'code' => $h['code'], 'counts' => $rowCounts];
         }
-        // normalizar orden de columnas tras posibles nuevos proveedores
         sort($providers);
         foreach ($hotelProviderMatrix as &$row) {
-            foreach ($providers as $prov) {
-                if (!isset($row['counts'][$prov])) $row['counts'][$prov] = 0;
-            }
+            foreach ($providers as $prov) if (!isset($row['counts'][$prov])) $row['counts'][$prov] = 0;
             ksort($row['counts']);
         }
         unset($row);
 
-        // --- Export CSV ---
+        // Export CSV
         if ($request->query('export') === 'csv') {
             $filename = 'disponibilidad_' . date('Ymd_His') . '.csv';
-
-            // 1) Totales por proveedor en la página visible (para decidir el orden de columnas)
-            //    Si prefieres el orden global (de todo el pool), usa $providerRateCounts en su lugar.
-            $providerTotals = []; // p.ej. ['AVX' => 237, 'ILR' => 210, ...]
+            $providerTotals = [];
             foreach ($visibleHotels as $h) {
                 foreach ($h['rooms'] as $room) {
                     $p = (string)($room['codtou'] ?? '');
@@ -568,60 +754,37 @@ XML;
                     $providerTotals[$p] = ($providerTotals[$p] ?? 0) + 1;
                 }
             }
-
-            // 2) Ordenar proveedores por total DESC (más tarifas a la izquierda)
-            //    Empates: alfabético ASC para que sea estable.
             uksort($providerTotals, function ($a, $b) use ($providerTotals) {
                 $cmp = ($providerTotals[$b] <=> $providerTotals[$a]);
                 return $cmp !== 0 ? $cmp : strcmp($a, $b);
             });
             $providers = array_keys($providerTotals);
 
-            // 3) Construir matriz hoteles × proveedores y total por hotel
             $matrix = [];
             foreach ($visibleHotels as $h) {
-                // Inicia las columnas en 0 siguiendo el orden ya calculado
                 $counts = array_fill_keys($providers, 0);
-
                 foreach ($h['rooms'] as $room) {
                     $p = (string)($room['codtou'] ?? '');
-                    if ($p !== '' && isset($counts[$p])) {
-                        $counts[$p]++;
-                    }
+                    if ($p !== '' && isset($counts[$p])) $counts[$p]++;
                 }
-
                 $matrix[] = [
                     'name'   => $h['name'] . " ({$h['code']})",
                     'counts' => $counts,
                     'total'  => array_sum($counts),
                 ];
             }
-
-            // 4) Ordenar filas (hoteles) por total DESC (ya lo tenías pedido antes)
             usort($matrix, fn($a, $b) => $b['total'] <=> $a['total']);
 
-            // 5) Generar CSV
             return response()->streamDownload(function () use ($matrix, $providers) {
                 $out = fopen('php://output', 'w');
-                fwrite($out, "\xEF\xBB\xBF"); // BOM para Excel
-
-                // Cabeceras: "Nombre Hotel", proveedores ordenados por potencia, y "Total"
+                fwrite($out, "\xEF\xBB\xBF");
                 fputcsv($out, array_merge(['Nombre Hotel'], $providers, ['Total']));
-
                 foreach ($matrix as $row) {
-                    fputcsv($out, array_merge(
-                        [$row['name']],
-                        array_values($row['counts']),
-                        [$row['total']]
-                    ));
+                    fputcsv($out, array_merge([$row['name']], array_values($row['counts']), [$row['total']]));
                 }
                 fclose($out);
-            }, $filename, [
-                'Content-Type' => 'text/csv; charset=UTF-8',
-            ]);
+            }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
         }
-
-
 
         // JSON
         if ($request->wantsJson()) {
@@ -643,8 +806,10 @@ XML;
                 'http_meta'                  => $httpMeta,
                 'perf'                       => $perf,
                 'selection_note'             => !empty($manualCodes)
-                    ? "{$perPage} visibles — consultados en lotes de {$batchSize} (códigos manuales)"
-                    : "{$perPage} visibles — consultados en lotes de {$batchSize} (modo zona por BD)",
+                    ? "{$perPage} visibles — consultados en lotes de 100 (códigos manuales)"
+                    : ($usingZoneMode
+                        ? "{$perPage} visibles — paginación nativa por zona (indpag/numrst)"
+                        : "{$perPage} visibles — consultados en lotes de 100 (modo codser por BD)"),
                 'effective' => [
                     'codnac'       => $codnac,
                     'timeout_ms'   => $timeoutMs,
@@ -653,9 +818,12 @@ XML;
                     'manual_codes' => !empty($manualCodes),
                     'zone_total'   => $zoneTotalHotels,
                 ],
-                // matriz por si quieres consumirla vía AJAX
-                'providers'           => $providers,
+                'providers'             => $providers,
                 'hotel_provider_matrix' => $hotelProviderMatrix,
+                // NUEVO: payloads y meta/preview en JSON también
+                'payloads'              => $allPayloads,
+                'payload_meta'          => $payloadMeta,
+                'payload_preview'       => $payloadPreview,
             ]);
         }
 
@@ -674,8 +842,10 @@ XML;
             'httpMeta'                 => $httpMeta,
             'perf'                     => $perf,
             'selectionNote'            => !empty($manualCodes)
-                ? "{$perPage} visibles — consultados en lotes de {$batchSize} (códigos manuales)"
-                : "{$perPage} visibles — consultados en lotes de {$batchSize} (modo zona por BD)",
+                ? "{$perPage} visibles — consultados en lotes de 100 (códigos manuales)"
+                : ($usingZoneMode
+                    ? "{$perPage} visibles — paginación nativa por zona (indpag/numrst)"
+                    : "{$perPage} visibles — consultados en lotes de 100 (modo codser por BD)"),
             'zoneTotalHotels'          => $zoneTotalHotels,
             'effective' => [
                 'codnac'       => $codnac,
@@ -685,12 +855,18 @@ XML;
                 'manual_codes' => !empty($manualCodes),
                 'zone_total'   => $zoneTotalHotels,
             ],
-            // 🔽 añadido para la vista
             'providers'            => $providers,
             'hotelProviderMatrix'  => $hotelProviderMatrix,
-            'firstPayload'         => $firstPayload,
+            // NUEVO: preview ampliado y todos los payloads
+            'firstPayload'         => $firstPayload,   // preview concatenado (hasta 5)
+            'payloads'             => $allPayloads,    // todos los XML (uno por batch/página)
+            'payload_meta'         => $payloadMeta,    // metadatos para UI
         ]);
     }
+
+
+
+
 
 
 
