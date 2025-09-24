@@ -10,7 +10,7 @@
       <div class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="p-6 md:p-8">
 
-          <form method="GET" action="{{ route('availability.search') }}" class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <form method="POST" action="{{ route('availability.search') }}" class="grid grid-cols-1 gap-6 md:grid-cols-2">
             @csrf
 
             {{-- Campo de búsqueda por nombre de área (autocompletado) --}}

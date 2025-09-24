@@ -224,7 +224,6 @@ class AvailabilityController extends Controller
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
             ],
         ]);
-
         // XML multi
         $buildXmlMulti = function (array $codsers) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
             $codserLines = implode("\n", array_map(fn($c) => "  <codser>{$c}</codser>", $codsers));
@@ -249,6 +248,7 @@ class AvailabilityController extends Controller
 </DisponibilidadHotelPeticion>
 XML;
         };
+        $firstPayload = !empty($codesPool) ? $buildXmlMulti(array_slice($codesPool, 0, $batchSize)) : null;
 
         // Métricas/red
         $reqMetrics   = [];
@@ -688,6 +688,7 @@ XML;
             // 🔽 añadido para la vista
             'providers'            => $providers,
             'hotelProviderMatrix'  => $hotelProviderMatrix,
+            'firstPayload'         => $firstPayload,
         ]);
     }
 
