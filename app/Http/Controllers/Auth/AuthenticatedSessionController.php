@@ -39,7 +39,10 @@ class AuthenticatedSessionController extends Controller
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
 
-            // Redirige a lo que el usuario quería ver o al HOME (dashboard)
+            // ✅ Guardar la conexión en sesión según el usuario
+            $user = Auth::user();
+            session(['db_conn' => $user->db_connection ?: 'mysql']);
+
             return redirect()->intended(RouteServiceProvider::HOME);
         }
 

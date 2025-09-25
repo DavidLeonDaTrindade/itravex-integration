@@ -69,6 +69,9 @@ class AvailabilityController extends Controller
             return response()->json(['error' => 'El código de nacionalidad debe tener al menos 2 caracteres'], 400);
         }
 
+        // Fuente de hoteles: 'db' (por defecto) o 'provider'
+        $source = $request->query('source', 'db');
+
         // Abrir sesión
         $sessionId = $this->openSession($cfg);
         if (!$sessionId) {
@@ -79,7 +82,7 @@ class AvailabilityController extends Controller
         $fecini = date('d/m/Y', strtotime($validated['fecini']));
         $fecfin = date('d/m/Y', strtotime($validated['fecfin']));
 
-        // Pool “histórico” (lo sigo dejando en perf, pero ya no limita el branch codser)
+        // Pool “histórico” (solo métrica)
         $poolSize    = 300;
         $currentPage = max(1, (int)$request->input('page', 1));
 
@@ -110,7 +113,8 @@ class AvailabilityController extends Controller
         }
 
         // ¿Usar modo ZONA nativo del proveedor?
-        $usingZoneMode = empty($manualCodes) && !empty($validated['codzge']);
+        // AHORA: solo si pides explícitamente source=provider
+        $usingZoneMode = empty($manualCodes) && !empty($validated['codzge']) && $source === 'provider';
 
         // Concurrency/Timeouts comunes
         $maxConcurrency = $complete ? 8  : 10;
@@ -140,11 +144,11 @@ class AvailabilityController extends Controller
         $hotelRateCounts      = [];
         $providerHotelSets    = [];
 
-        // NUEVO: contenedores para payloads
-        $allPayloads   = [];   // todos los XML enviados
-        $payloadMeta   = [];   // metadatos de batches y totales
-        $payloadPreview = null; // preview ampliado (hasta 5)
-        $firstPayload = null;  // compat con la vista actual
+        // Contenedores para payloads
+        $allPayloads    = [];
+        $payloadMeta    = [];
+        $payloadPreview = null;
+        $firstPayload   = null;
         $zoneTotalHotels = 0;
 
         // Helper retry (usado en modo zona)
@@ -184,7 +188,7 @@ class AvailabilityController extends Controller
             }
         };
 
-        // ---------- MODO ZONA nativo ----------
+        // ---------- MODO ZONA (solo si source=provider) ----------
         if ($usingZoneMode) {
             $t_db0 = microtime(true);
             $zoneTotalHotels = \App\Models\Hotel::where('zone_code', $validated['codzge'])->count();
@@ -232,7 +236,6 @@ XML;
 
             do {
                 $xmlBody = $buildXmlZone($indpag);
-                // NUEVO: guardar cada payload para el preview/listado
                 $allPayloads[] = $xmlBody;
 
                 try {
@@ -335,20 +338,18 @@ XML;
                 $firstHeaders['note'] = $note;
             }
 
-            // Meta para payloads (zona)
             $payloadMeta = [
                 'mode'          => 'zone',
                 'batches'       => count($allPayloads),
-                'showing'       => 0, // se rellena más abajo al construir el preview
-                'codser_total'  => null, // en zona no mandamos codser
+                'showing'       => 0,
+                'codser_total'  => null,
                 'zone'          => $validated['codzge'] ?? null,
             ];
         }
-        // ---------- MODO POR LISTA/CODSER (AHORA SIN PERDER NINGUNO) ----------
+        // ---------- MODO POR LISTA/CODSER (por BD) ----------
         else {
             $t_db0 = microtime(true);
 
-            // 1) Construir la lista COMPLETA de codser (sin skip/take)
             if (!empty($manualCodes)) {
                 if (!empty($validated['codzge'])) {
                     $manualCodes = \App\Models\Hotel::where('zone_code', $validated['codzge'])
@@ -421,17 +422,16 @@ XML;
                         'from_zone'    => $validated['codzge'] ?? null,
                         'manual_codes' => !empty($manualCodes),
                         'zone_total'   => $zoneTotalHotels,
+                        'source'       => $source,
                     ],
                     'providers'           => [],
                     'hotelProviderMatrix' => [],
-                    // NUEVO: payloads vacíos en este early return
                     'firstPayload'  => null,
                     'payloads'      => [],
                     'payload_meta'  => ['mode' => 'codes', 'batches' => 0, 'showing' => 0, 'codser_total' => 0],
                 ]);
             }
 
-            // 2) Peticiones en lotes de 100 codser (sin dejar ninguno)
             $client = new \GuzzleHttp\Client([
                 'headers' => [
                     'Accept-Encoding' => 'gzip, deflate, br',
@@ -465,17 +465,14 @@ XML;
 XML;
             };
 
-            // 🔢 Tamaño fijo 100 por requisito
             $batchSizeCodser = 50;
             $chunks = array_chunk($codesPool, $batchSizeCodser, false);
             $perf['batches_sent'] = count($chunks);
 
-            // NUEVO: guardar TODOS los payloads para el preview
             foreach ($chunks as $i => $chunk) {
                 $allPayloads[] = $buildXmlMulti($chunk);
             }
 
-            // Ejecutamos TODOS los batches (para no dejar ninguno), con límite de concurrencia
             $promises = [];
             foreach ($allPayloads as $i => $payloadXml) {
                 $promises["batch_{$i}"] = $client->postAsync($endpoint, [
@@ -589,24 +586,22 @@ XML;
             $each->promise()->wait();
             $perf['http_ms'] = (int) round((microtime(true) - $t_http0) * 1000);
 
-            // Meta para payloads (códigos)
             $payloadMeta = [
                 'mode'          => 'codes',
                 'batches'       => count($allPayloads),
-                'showing'       => 0, // se rellena más abajo al construir el preview
+                'showing'       => 0,
                 'codser_total'  => count($codesPool),
                 'zone'          => $validated['codzge'] ?? null,
             ];
         }
 
-        // ---------- TAIL COMÚN: ordenar, paginar, métricas y salida ----------
+        // ---------- TAIL COMÚN ----------
         if (!empty($allHotels)) {
             usort($allHotels, fn($a, $b) => ($a['price'] <=> $b['price']) ?: strcmp($a['name'], $b['name']));
         }
 
         if (!isset($offsetWithinBlock)) $offsetWithinBlock = 0;
 
-        // Paginar sobre TODO lo recuperado
         $availableTotal = count($allHotels);
         $lastPage = max(1, (int) ceil($availableTotal / $perPage));
         if ($currentPage > $lastPage) {
@@ -616,7 +611,6 @@ XML;
         $offset = ($currentPage - 1) * $perPage;
         $visibleHotels = array_slice($allHotels, $offset, $perPage);
 
-        // Conteos de la página
         $hotelRateCountsPage = [];
         foreach ($visibleHotels as $h) {
             $code = $h['code'];
@@ -694,7 +688,7 @@ XML;
             'note'              => $firstHeaders['note'] ?? null,
         ];
 
-        // NUEVO: construir preview ampliado (concatena hasta 5 payloads con separadores)
+        // Preview de payloads (hasta 5)
         if (!empty($allPayloads)) {
             $maxShow = 5;
             $toShow = array_slice($allPayloads, 0, $maxShow);
@@ -712,36 +706,7 @@ XML;
                 $payloadMeta = ['mode' => $usingZoneMode ? 'zone' : 'codes', 'batches' => 0, 'showing' => 0, 'codser_total' => null, 'zone' => $validated['codzge'] ?? null];
             }
         }
-
-        // Compat: la vista actual espera 'firstPayload'. Le daremos el preview ampliado.
         $firstPayload = $payloadPreview;
-
-        // Matriz proveedor
-        $scope = $request->query('scope', 'page') === 'block' ? 'block' : 'page';
-        $hotelsForMatrix = ($scope === 'block') ? $allHotels : $visibleHotels;
-
-        $providers = array_keys($providerRateCounts ?? []);
-        sort($providers);
-        $hotelProviderMatrix = [];
-        foreach ($hotelsForMatrix as $h) {
-            $rowCounts = array_fill_keys($providers, 0);
-            foreach ($h['rooms'] as $room) {
-                $p = (string) ($room['codtou'] ?? '');
-                if ($p === '') continue;
-                if (!array_key_exists($p, $rowCounts)) {
-                    $rowCounts[$p] = 0;
-                    if (!in_array($p, $providers, true)) $providers[] = $p;
-                }
-                $rowCounts[$p]++;
-            }
-            $hotelProviderMatrix[] = ['name' => $h['name'], 'code' => $h['code'], 'counts' => $rowCounts];
-        }
-        sort($providers);
-        foreach ($hotelProviderMatrix as &$row) {
-            foreach ($providers as $prov) if (!isset($row['counts'][$prov])) $row['counts'][$prov] = 0;
-            ksort($row['counts']);
-        }
-        unset($row);
 
         // Export CSV
         if ($request->query('export') === 'csv') {
@@ -817,10 +782,10 @@ XML;
                     'from_zone'    => $validated['codzge'] ?? null,
                     'manual_codes' => !empty($manualCodes),
                     'zone_total'   => $zoneTotalHotels,
+                    'source'       => $source,
                 ],
-                'providers'             => $providers,
-                'hotel_provider_matrix' => $hotelProviderMatrix,
-                // NUEVO: payloads y meta/preview en JSON también
+                'providers'             => array_keys($providerRateCounts ?? []),
+                'hotel_provider_matrix' => [], // (omite para JSON si no lo necesitas)
                 'payloads'              => $allPayloads,
                 'payload_meta'          => $payloadMeta,
                 'payload_preview'       => $payloadPreview,
@@ -854,15 +819,16 @@ XML;
                 'from_zone'    => $validated['codzge'] ?? null,
                 'manual_codes' => !empty($manualCodes),
                 'zone_total'   => $zoneTotalHotels,
+                'source'       => $source,   // ← añadido
             ],
-            'providers'            => $providers,
-            'hotelProviderMatrix'  => $hotelProviderMatrix,
-            // NUEVO: preview ampliado y todos los payloads
-            'firstPayload'         => $firstPayload,   // preview concatenado (hasta 5)
-            'payloads'             => $allPayloads,    // todos los XML (uno por batch/página)
-            'payload_meta'         => $payloadMeta,    // metadatos para UI
+            'providers'            => array_keys($providerRateCounts ?? []),
+            'hotelProviderMatrix'  => [], // si tu vista lo usa, puedes mantener el cálculo original
+            'firstPayload'         => $payloadPreview,
+            'payloads'             => $allPayloads,
+            'payload_meta'         => $payloadMeta,
         ]);
     }
+
 
 
 

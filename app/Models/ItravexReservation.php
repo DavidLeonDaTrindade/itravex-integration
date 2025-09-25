@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class ItravexReservation extends Model
+class ItravexReservation extends BaseClientModel
 {
     protected $fillable = [
         'locata',

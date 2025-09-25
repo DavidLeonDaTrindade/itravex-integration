@@ -11,6 +11,9 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         ImportHotelsByZone::class,
         \App\Console\Commands\ContarTarifasXML::class,
+        \App\Console\Commands\ImportZones2::class,
+        \App\Console\Commands\ImportHotelsByZone2::class,  // cliente 2
+
 
     ];
 

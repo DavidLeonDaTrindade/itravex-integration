@@ -3,27 +3,27 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-
-// importa tu middleware:
-use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\EnsureClientConnection;
+use App\Http\Middleware\AcceptDbConnParam;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
-        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
-        health: '/up',
+        // api: __DIR__.'/../routes/api.php',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        // Alias de middlewares de RUTA:
+    ->withMiddleware(function (Middleware $middleware) {
+        // Aliases para usarlos por nombre en rutas/grupos
         $middleware->alias([
-            'admin' => EnsureUserIsAdmin::class,
+            'client.db'      => EnsureClientConnection::class,
+            'accept-db-conn' => AcceptDbConnParam::class,
         ]);
 
-        // Ejemplos (opcionales) para globales o grupos:
-        // $middleware->append(\App\Http\Middleware\AlgoGlobal::class);
-        // $middleware->web(append: [\App\Http\Middleware\SoloWeb::class]);
-        // $middleware->api(append: [\App\Http\Middleware\SoloApi::class]);
+        // (Opcional) Para que apliquen a TODAS las peticiones web:
+        // $middleware->web([
+        //     AcceptDbConnParam::class,
+        //     EnsureClientConnection::class,
+        // ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

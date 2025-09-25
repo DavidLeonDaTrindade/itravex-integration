@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Hotel extends Model
+class Hotel extends BaseClientModel
 {
     protected $fillable = [
         'codser',

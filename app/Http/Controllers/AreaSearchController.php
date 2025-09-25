@@ -17,13 +17,15 @@ class AreaSearchController extends Controller
         $q = trim($request->input('q'));
         $limit = (int)($request->input('limit', 10));
 
-        $rows = DB::table('zones')
+        // Usar la conexión de la sesión
+        $rows = DB::connection(session('db_conn'))
+            ->table('zones')
             ->select(['id', 'code', 'name'])
             ->where('code', 'LIKE', 'A-%') // solo Áreas
             ->where(function ($qq) use ($q) {
                 $qq->whereRaw('UPPER(name) LIKE UPPER(?)', [$q . '%'])
-                    ->orWhereRaw('UPPER(name) LIKE UPPER(?)', ['% ' . $q . '%'])
-                    ->orWhereRaw('UPPER(name) LIKE UPPER(?)', ['%' . $q . '%']);
+                   ->orWhereRaw('UPPER(name) LIKE UPPER(?)', ['% ' . $q . '%'])
+                   ->orWhereRaw('UPPER(name) LIKE UPPER(?)', ['%' . $q . '%']);
             })
             ->orderBy('name')
             ->limit($limit)
@@ -31,20 +33,21 @@ class AreaSearchController extends Controller
 
         return response()->json(['items' => $rows]);
     }
-    // NUEVO: hoteles por zona
+
+    // Hoteles por zona
     public function hotels(Request $request, string $code)
     {
-        // Valida que sea A-xxxx
         $request->merge(['code' => $code]);
         $request->validate([
             'code' => ['required', 'string', 'regex:/^A-\d+$/'],
         ]);
 
-        // Trae los hoteles cuya zone_code == A-xxxx
-        $rows = DB::table('hotels') // <- si tu tabla tiene otro nombre, cámbialo aquí
+        // Usar la conexión dinámica de la sesión
+        $rows = DB::connection(session('db_conn'))
+            ->table('hotels')
             ->select(['codser', 'name'])
             ->where('zone_code', $code)
-            ->orderBy('name')        // o por codser si prefieres
+            ->orderBy('name')
             ->get();
 
         return response()->json([

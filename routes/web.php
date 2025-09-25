@@ -7,6 +7,10 @@ use App\Http\Controllers\ItravexReservationController;
 use App\Http\Controllers\LogViewerController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\AreaSearchController;
+use Illuminate\Support\Facades\Auth;
+use App\Models\Hotel;
+use App\Models\Zone;
+
 
 
 
@@ -14,6 +18,16 @@ Route::get('/', fn() => view('welcome'))->name('home');
 
 // Rutas protegidas: solo usuarios logueados (sin verificación de email)
 Route::middleware(['auth'])->group(function () {
+
+    Route::get('/_debug-db', function () {
+        return response()->json([
+            'session_db'  => session('db_conn'),
+            'user_db'     => optional(Auth::user())->db_connection,
+            'hotel_conn'  => (new Hotel)->getConnectionName(),
+            'zone_conn'   => (new Zone)->getConnectionName(),
+            'A210_hotels' => Hotel::where('zone_code', 'A-210')->count(),
+        ]);
+    })->name('debug.db');
 
     // ---- Perfil (Breeze) ----
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -80,5 +94,7 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('throttle:30,1')
         ->where('code', 'A-\d+');
 });
+
+    
 
 require __DIR__ . '/auth.php';
