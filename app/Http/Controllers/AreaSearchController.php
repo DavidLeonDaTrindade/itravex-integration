@@ -14,15 +14,15 @@ class AreaSearchController extends Controller
             'limit' => 'nullable|integer|min:1|max:20',
         ]);
 
-        $q = trim($request->input('q'));
+        $q     = trim($request->input('q'));
         $limit = (int)($request->input('limit', 10));
 
-        // Usar la conexión de la sesión
-        $rows = DB::connection(session('db_conn'))
-            ->table('zones')
+        // ✅ Usar la conexión por defecto ya fijada por el middleware
+        $rows = DB::table('zones')
             ->select(['id', 'code', 'name'])
             ->where('code', 'LIKE', 'A-%') // solo Áreas
             ->where(function ($qq) use ($q) {
+                // Con utf8mb4_unicode_ci ya es case-insensitive; mantenemos UPPER por seguridad/compatibilidad
                 $qq->whereRaw('UPPER(name) LIKE UPPER(?)', [$q . '%'])
                    ->orWhereRaw('UPPER(name) LIKE UPPER(?)', ['% ' . $q . '%'])
                    ->orWhereRaw('UPPER(name) LIKE UPPER(?)', ['%' . $q . '%']);
@@ -42,9 +42,8 @@ class AreaSearchController extends Controller
             'code' => ['required', 'string', 'regex:/^A-\d+$/'],
         ]);
 
-        // Usar la conexión dinámica de la sesión
-        $rows = DB::connection(session('db_conn'))
-            ->table('hotels')
+        // ✅ Usar la conexión por defecto ya fijada por el middleware
+        $rows = DB::table('hotels')
             ->select(['codser', 'name'])
             ->where('zone_code', $code)
             ->orderBy('name')

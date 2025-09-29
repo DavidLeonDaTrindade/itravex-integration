@@ -8,11 +8,10 @@ use App\Http\Controllers\LogViewerController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\AreaSearchController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 use App\Models\Hotel;
 use App\Models\Zone;
-
-
-
 
 Route::get('/', fn() => view('welcome'))->name('home');
 
@@ -21,13 +20,33 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/_debug-db', function () {
         return response()->json([
-            'session_db'  => session('db_conn'),
+            'session_db'  => session('db_connection'),
             'user_db'     => optional(Auth::user())->db_connection,
             'hotel_conn'  => (new Hotel)->getConnectionName(),
             'zone_conn'   => (new Zone)->getConnectionName(),
             'A210_hotels' => Hotel::where('zone_code', 'A-210')->count(),
         ]);
     })->name('debug.db');
+    Route::get('/db-check', function () {
+        return response()->json([
+            'session'            => session('db_connection'),
+            'db_default_manager' => DB::getDefaultConnection(),
+            'db_config_default'  => config('database.default'),
+            'database_name'      => DB::connection()->getConfig('database'),
+        ]);
+    });
+
+
+    // ---- Ruta para cambiar de base de datos ----
+    Route::post('/switch-db', function (Request $request) {
+        $request->validate([
+            'db_connection' => 'required|in:mysql,mysql_cli2',
+        ]);
+
+        session(['db_connection' => $request->string('db_connection')->toString()]);
+
+        return back()->with('status', 'Base de datos cambiada correctamente.');
+    })->name('db.switch');
 
     // ---- Perfil (Breeze) ----
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -81,6 +100,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['auth', 'throttle:6,1'])->post('email/verification-notification', function () {
         return back()->with('status', 'Email verification is disabled.');
     })->name('verification.send');
+
     Route::middleware('auth')->group(function () {
         // Cambiar contraseña autenticado
         Route::put('password', [PasswordController::class, 'update'])
@@ -94,7 +114,5 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('throttle:30,1')
         ->where('code', 'A-\d+');
 });
-
-    
 
 require __DIR__ . '/auth.php';

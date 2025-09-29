@@ -4,16 +4,23 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
-class EnsureUserIsAdmin
+class EnsureClientConnection
 {
+    /** @var string[] */
+    private array $allowed = ['mysql', 'mysql_cli2'];
+
     public function handle(Request $request, Closure $next)
     {
-        $user = $request->user(); // viene del middleware 'auth'
+        $selected = session('db_connection', 'mysql');
 
-        if (!$user || !$user->is_admin) {
-            abort(403);
+        if (!in_array($selected, $this->allowed, true)) {
+            $selected = 'mysql';
+            session(['db_connection' => $selected]);
         }
+
+        DB::setDefaultConnection($selected);
 
         return $next($request);
     }

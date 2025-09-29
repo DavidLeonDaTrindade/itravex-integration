@@ -23,44 +23,7 @@
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 antialiased">
 
-    {{-- Topbar --}}
-    <header class="border-b border-slate-200/70 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/70 backdrop-blur supports-backdrop-blur:backdrop-blur-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6">
-            <div class="h-16 flex items-center justify-between">
-                <a href="{{ route('home') }}" class="flex items-center gap-3 group">
-                    <div class="h-9 w-9 rounded-xl bg-blue-600 text-white grid place-items-center shadow-sm group-hover:scale-105 transition">
-                        🛎️
-                    </div>
-                    <div class="leading-tight">
-                        <p class="font-semibold text-slate-900 dark:text-white tracking-tight">Itravex</p>
-                        <p class="text-xs text-slate-500">Plug&Beds · B2B</p>
-                    </div>
-                </a>
-
-                @if (Route::has('login'))
-                    <nav class="flex items-center gap-3">
-                        @auth
-                            <a href="{{ route('dashboard') }}"
-                               class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300/80 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-sm">
-                                <span>Ir al panel</span> <span>→</span>
-                            </a>
-                        @else
-                            <a href="{{ route('login') }}"
-                               class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300/80 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition text-sm">
-                                Iniciar sesión
-                            </a>
-                            @if (Route::has('register'))
-                                <a href="{{ route('register') }}"
-                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition text-sm shadow">
-                                    Crear cuenta
-                                </a>
-                            @endif
-                        @endauth
-                    </nav>
-                @endif
-            </div>
-        </div>
-    </header>
+    
 
     {{-- Hero --}}
     <section class="relative overflow-hidden">
