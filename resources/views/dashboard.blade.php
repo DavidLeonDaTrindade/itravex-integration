@@ -4,7 +4,7 @@
     <div class="w-full max-w-4xl">
       <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="px-6 py-8 md:px-10 md:py-12">
-          <div class="mb-4 text-xs text-slate-500">
+          <div class="mb-4 text-s text-slate-500">
             <span>session: {{ session('db_connection') }}</span> ·
             <span>default: {{ DB::getDefaultConnection() }}</span> ·
             <span>db: {{ DB::connection()->getConfig('database') }}</span>
@@ -13,37 +13,51 @@
             <h1 class="text-3xl font-semibold text-slate-900 tracking-tight">Bienvenido</h1>
             <p class="mt-2 text-slate-600">Consulta disponibilidad de hoteles y realiza tu reserva fácilmente.</p>
           </header>
+
           {{-- Selector de base de datos --}}
-          <div class="mb-6 flex items-center justify-between">
-            <div class="text-xs text-slate-500">
-              Conexión actual:
-              <span class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs
-                  @if(session('db_connection','mysql')==='mysql') border-blue-200 bg-blue-50 text-blue-700
-                  @else border-amber-200 bg-amber-50 text-amber-700 @endif">
-                {{ session('db_connection', 'mysql') }}
-              </span>
+          <div class="mb-6">
+            <div class="flex items-center justify-between">
+              <div class="text-sm text-slate-700">
+                <span class="font-medium">Base de datos activa:</span>
+                <span class="ml-2 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs
+        @if(session('db_connection','mysql')==='mysql')
+          border-blue-300 bg-blue-50 text-blue-700
+        @else
+          border-green-300 bg-green-50 text-green-700
+        @endif">
+                  {{ session('db_connection') === 'mysql' ? 'itravex (principal)' : 'itravex_cliente2' }}
+                </span>
+              </div>
+
+              <form method="POST" action="{{ route('db.switch') }}" class="flex gap-2">
+                @csrf
+                <input type="hidden" name="db_connection" id="db_connection" value="{{ session('db_connection','mysql') }}">
+                @php $current = session('db_connection', 'mysql'); @endphp
+
+                {{-- Botón itravex --}}
+                <button type="submit"
+                  onclick="document.getElementById('db_connection').value='mysql'"
+                  class="inline-flex items-center gap-1 px-4 py-2 text-sm rounded-md shadow-sm transition
+          {{ $current==='mysql'
+            ? 'bg-blue-600 text-white'
+            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
+                  🗄️ itravex
+                </button>
+
+                {{-- Botón itravex_cliente2 --}}
+                <button type="submit"
+                  onclick="document.getElementById('db_connection').value='mysql_cli2'"
+                  class="inline-flex items-center gap-1 px-4 py-2 text-sm rounded-md shadow-sm transition
+          {{ $current==='mysql_cli2'
+            ? 'bg-green-600 text-white'
+            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
+                  🗄️ itravex_cliente2
+                </button>
+              </form>
             </div>
-
-            <form method="POST" action="{{ route('db.switch') }}" class="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50">
-              @csrf
-              <input type="hidden" name="db_connection" id="db_connection" value="{{ session('db_connection','mysql') }}">
-              @php $current = session('db_connection', 'mysql'); @endphp
-
-              <button type="submit"
-                onclick="document.getElementById('db_connection').value='mysql'"
-                class="px-3 py-1.5 text-xs rounded-md transition
-              {{ $current==='mysql' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900' }}">
-                itravex
-              </button>
-
-              <button type="submit"
-                onclick="document.getElementById('db_connection').value='mysql_cli2'"
-                class="px-3 py-1.5 text-xs rounded-md transition
-              {{ $current==='mysql_cli2' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900' }}">
-                itravex_cliente2
-              </button>
-            </form>
           </div>
+
+
 
           <div class="grid gap-4 sm:grid-cols-2">
             {{-- Formulario de disponibilidad --}}
