@@ -13,7 +13,7 @@
           <form method="POST" action="{{ route('availability.search') }}" class="grid grid-cols-1 gap-6 md:grid-cols-2">
             @csrf
 
-            {{-- Campo de búsqueda por nombre de área (autocompletado) --}}
+            {{-- ======================== BÚSQUEDA POR ZONA ======================== --}}
             <div class="md:col-span-1 relative">
               <label for="area_name" class="block text-sm font-medium text-slate-700">
                 Área (buscar por nombre)
@@ -44,7 +44,8 @@
               <p class="mt-1 text-xs text-slate-500">Si se rellena, se ignorarán los códigos manuales (salvo intersección).</p>
             </div>
 
-            <div class="md:col-span-1">
+            {{-- ======================== CÓDIGOS MANUALES ======================== --}}
+            <div class="md:col-span-2">
               <div class="flex items-center justify-between">
                 <label for="hotel_codes" class="block text-sm font-medium text-slate-700">
                   Códigos de hotel (codser)
@@ -56,7 +57,8 @@
                         placeholder="105971, 12345&#10;67890">{{ old('hotel_codes') }}</textarea>
               <p class="mt-1 text-xs text-slate-500">Separados por coma, espacios o saltos de línea.</p>
             </div>
-</br>
+
+            {{-- ======================== FECHAS / ADULTOS ======================== --}}
             <div>
               <label for="fecini" class="block text-sm font-medium text-slate-700">Fecha Inicio</label>
               <input id="fecini" type="date" name="fecini" value="{{ old('fecini') }}" required
@@ -82,6 +84,7 @@
               <p class="mt-1 text-xs text-slate-500">ISO 3166-1 (p. ej. <strong>ESP</strong>, <strong>FRA</strong>, <strong>USA</strong>).</p>
             </div>
 
+            {{-- ======================== OPCIONES DE RENDIMIENTO ======================== --}}
             <div class="grid grid-cols-2 gap-4 md:col-span-2">
               <div>
                 <label for="timeout" class="block text-sm font-medium text-slate-700">Timeout (ms)</label>
@@ -90,11 +93,27 @@
               </div>
 
               <div>
-                <label for="numrst" class="block text-sm font-medium text-slate-700">Resultados por página (numrst)</label>
+                <label for="numrst" class="block text-sm font-medium text-slate-700">
+                  Resultados por página del proveedor (numrst)
+                </label>
                 <input id="numrst" type="number" name="numrst" min="1" max="500" value="{{ old('numrst', 20) }}" placeholder="20"
+                       class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                <p class="mt-1 text-xs text-slate-500">Se aplica en <strong>source=provider</strong> (paginación nativa indpag/numrst)</p>
+              </div>
+
+              <div>
+                <label for="per_page" class="block text-sm font-medium text-slate-700">Tamaño de página UI (per_page)</label>
+                <input id="per_page" type="number" name="per_page" min="1" max="500" value="{{ old('per_page', 30) }}" placeholder="30"
                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
               </div>
 
+              <div>
+                <label for="batch_size" class="block text-sm font-medium text-slate-700">Tamaño de lote (batch_size)</label>
+                <input id="batch_size" type="number" name="batch_size" min="1" max="200" value="{{ old('batch_size', 50) }}" placeholder="50"
+                       class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+              </div>
+
+              {{-- Credenciales opcionales --}}
               <div class="md:col-span-2 rounded-xl border border-slate-200 p-4">
                 <div class="flex items-center justify-between">
                   <h3 class="text-sm font-medium text-slate-700">Credenciales del proveedor (opcional)</h3>
@@ -136,7 +155,8 @@
               </div>
             </div>
 
-            <fieldset class="md:col-span-2">
+            {{-- ======================== MODO Y ORIGEN ======================== --}}
+            <fieldset>
               <legend class="block text-sm font-medium text-slate-700">Modo</legend>
               <div class="mt-2 flex items-center gap-6">
                 <label class="inline-flex items-center gap-2 text-sm text-slate-700">
@@ -171,7 +191,7 @@
       const textAreaHotels = document.getElementById('hotel_codes');
       const countEl = document.getElementById('hotel_count');
 
-      // Endpoints
+      // Endpoints (ajusta si tu ruta difiere)
       const ENDPOINT = @json(url('areas'));             // /areas?q=...
       const HOTELS_ENDPOINT_BASE = @json(url('areas')); // /areas/{code}/hotels
 
@@ -179,6 +199,21 @@
       let debounceTimer = null;
       let lastItems = [];
       let activeIndex = -1;
+
+      function countCodes(str) {
+        if (!str) return 0;
+        const tokens = String(str)
+          .replace(/[\n\r;]/g, ' ')
+          .split(/[,\s]+/g)
+          .map(s => s.trim())
+          .filter(Boolean);
+        return new Set(tokens).size;
+      }
+
+      function updateCounter() {
+        const n = countCodes(textAreaHotels.value);
+        if (countEl) countEl.textContent = `${n} ${n === 1 ? 'hotel' : 'hoteles'}`;
+      }
 
       function showSuggestions(items) {
         suggestions.innerHTML = '';
@@ -254,18 +289,18 @@
 
           const codes = (data.items || []).map(it => it.codser).filter(Boolean);
 
-          // Salida: agrupar 20 por línea (cómodo). Cambia a join('\n') si prefieres uno/linea.
+          // Agrupar 20 por línea para lectura; puedes cambiar a join('\n') si prefieres 1/linea
           const chunkSize = 20;
           const lines = [];
           for (let i = 0; i < codes.length; i += chunkSize) {
             lines.push(codes.slice(i, i + chunkSize).join(', '));
           }
           textAreaHotels.value = lines.join('\n');
-          if (countEl) countEl.textContent = `${codes.length} ${codes.length === 1 ? 'hotel' : 'hoteles'}`;
+          updateCounter();
         } catch (e) {
           console.error(e);
           textAreaHotels.value = '';
-          if (countEl) countEl.textContent = '0 hoteles';
+          updateCounter();
         }
       }
 
@@ -276,7 +311,7 @@
         // limpiar selección previa
         inputCodzge.value = '';
         textAreaHotels.value = '';
-        if (countEl) countEl.textContent = '0 hoteles';
+        updateCounter();
 
         if (debounceTimer) clearTimeout(debounceTimer);
         if (q.length < 2) { suggestions.classList.add('hidden'); lastItems = []; return; }
@@ -304,9 +339,11 @@
         else if (e.key === 'Escape') { suggestions.classList.add('hidden'); }
       });
 
-      // Estado inicial limpio
-      textAreaHotels.value = '';
-      if (countEl) countEl.textContent = '0 hoteles';
+      // Contador dinámico al editar manualmente
+      textAreaHotels.addEventListener('input', updateCounter);
+
+      // Estado inicial
+      updateCounter();
     })();
   </script>
 

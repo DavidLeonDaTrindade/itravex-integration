@@ -572,33 +572,67 @@
                             <li class="room-item">
                                 <div class="room-left">
                                     @php
-                                    
+                                    // --- helpers ---
+                                    $afterHash = function ($v) {
+                                    if (!is_string($v) || $v === '') return '';
+                                    $pos = strpos($v, '#');
+                                    return $pos === false ? trim($v) : trim(substr($v, $pos + 1));
+                                    };
+                                    $removeSuffix = function ($text, $suffix) {
+                                    $len = strlen($suffix);
+                                    if ($len > 0 && substr($text, -$len) === $suffix) return substr($text, 0, -$len);
+                                    return $text;
+                                    };
 
-                                    $rawType = $room['room_type'] ?? '';
-                                    $rawBoard = $room['board'] ?? '';
+                                    // --- fuentes ---
+                                    $rawSmo = $room['codsmo'] ?? ($room['room_type'] ?? '');
+                                    $rawCha = $room['codcha'] ?? ($room['room_code'] ?? '');
+                                    $rawRal = $room['codral'] ?? ($room['board'] ?? '');
+                                    $infrcl = $room['infrcl'] ?? ($room['infrcl_text'] ?? '');
 
-                                    // Solo lo que viene después de '#'
-                                    $typeLabel = is_string($rawType) ? trim(Str::after($rawType, '#')) : '—';
-                                    $boardLabel = is_string($rawBoard) ? trim(Str::after($rawBoard, '#')) : '—';
+                                    // --- labels limpios ---
+                                    $smoLabel = $afterHash($rawSmo); // ej: "Room" o "Double/twin"
+                                    $chaLabel = $afterHash($rawCha); // ej: "Superior", "Standard"
+                                    $ralLabel = $afterHash($rawRal); // ej: "Room only", "Bed and breakfast"
 
-                                    // Si no hay '#', usa el valor original
-                                    if ($typeLabel === '' && $rawType) $typeLabel = $rawType;
-                                    if ($boardLabel === '' && $rawBoard) $boardLabel = $rawBoard;
+                                    // Inferir codcha desde infrcl si no viene
+                                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                                    $parts = explode('!~', $infrcl);
+                                    $last = trim(end($parts)); // "SuperiorRoom_Refundable..."
+                                    $first = strtok($last, '_'); // "SuperiorRoom"
+                                    if ($first !== false) {
+                                    $first = $removeSuffix($first, 'Room'); // "Superior"
+                                    $chaLabel = trim($first);
+                                    }
+                                    }
+
+                                    // Tipo (codsmo + codcha evitando duplicado)
+                                    $roomParts = [];
+                                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+
+                                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
                                     @endphp
 
                                     <p class="room-title">
-                                        {{ $typeLabel }} <span class="text-slate-400">—</span> {{ $boardLabel }}
+                                        <span class="font-semibold text-slate-700">Tipo -</span>
+                                        {{ $roomDesc }}
                                     </p>
+                                    <p class="room-title">
+                                        <span class="font-semibold text-slate-700">Régimen -</span>
+                                        {{ $boardDesc }}
+                                    </p>
+
                                     <p class="room-meta">
                                         💶 {{ number_format($room['price_per_night'], 2) }} {{ $hotel['currency'] }}
-                                        @if ($room['availability'])
+                                        @if (!empty($room['availability']))
                                         <span class="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
                                             {{ $room['availability'] }} disp.
                                         </span>
                                         @endif
                                     </p>
 
-                                    {{-- 👇 NUEVO: Proveedor debajo del precio --}}
                                     @if(!empty($room['codtou']))
                                     <p class="mt-1 text-xs text-slate-600">
                                         🏷️ Proveedor: <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
@@ -606,30 +640,8 @@
                                     @endif
                                 </div>
 
-                                <div class="room-right">
-                                    <form method="GET" action="{{ route('availability.lock.form') }}" class="shrink-0">
-                                        <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
-                                        <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
-                                        <input type="hidden" name="currency" value="{{ $hotel['currency'] }}">
-                                        <input type="hidden" name="price_per_night" value="{{ $room['price_per_night'] }}">
-                                        <input type="hidden" name="board" value="{{ $room['board'] }}">
-                                        <input type="hidden" name="codzge" value="{{ $hotel['zone'] }}">
-                                        <input type="hidden" name="start_date" value="{{ request('fecini') }}">
-                                        <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
-                                        <input type="hidden" name="room_type" value="{{ $room['room_type'] }}">
-                                        <input type="hidden" name="room_code" value="{{ $room['room_code'] }}">
-                                        <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] }}">
-                                        <input type="hidden" name="room_internal_id" value="{{ $room['room_internal_id'] }}">
-                                        <input type="hidden" name="provider" value="{{ $room['codtou'] ?? '' }}">
-
-
-                                        <button type="submit" class="btn-sel select-btn">
-                                            <span class="label">Seleccionar</span>
-                                            <span class="spinner" aria-hidden="true"></span>
-                                        </button>
-                                    </form>
-                                </div>
                             </li>
+
                             @endforeach
                         </ul>
                     </details>

@@ -19,11 +19,59 @@ class AvailabilityController extends Controller
 {
     public function checkAvailability(Request $request)
     {
+        // === PRIMERA FASE: si llega POST, guardamos hotel_codes en cache y redirigimos a GET con 'k' (PRG) ===
+        if ($request->isMethod('post')) {
+            // Validación en POST (igual que la tuya)
+            $validated = $request->validate([
+                'fecini'       => 'required|date',
+                'fecfin'       => 'required|date|after_or_equal:fecini',
+                'codzge'       => 'required_without:hotel_codes|string|nullable',
+                'hotel_codes'  => 'required_without:codzge|string|nullable',
+                'numadl'       => 'required|integer|min:1',
+                'page'         => 'sometimes|integer|min:1',
+                'mode'         => 'sometimes|in:fast,full',
+                // Opcionales
+                'timeout'      => 'nullable|integer|min:1000|max:60000',
+                'numrst'       => 'nullable|integer|min:1|',
+                'batch_size'   => 'nullable|integer|min:1|max:200',
+                'per_page'     => 'sometimes|integer|min:1|max:500',
+                // Credenciales/endpoint opcionales
+                'endpoint'     => 'sometimes|url|nullable',
+                'codsys'       => 'sometimes|string|nullable',
+                'codage'       => 'sometimes|string|nullable',
+                'user'         => 'sometimes|string|nullable',
+                'pass'         => 'sometimes|string|nullable',
+                'codtou'       => 'sometimes|string|nullable',
+                // País ISO 3166-1 (2 o 3 letras)
+                'codnac'       => 'nullable|string|min:2|max:3',
+            ]);
+
+            // Normaliza y guarda hotel_codes en cache (si vienen)
+            $codesRaw = (string) ($validated['hotel_codes'] ?? '');
+            $codes = [];
+            if ($codesRaw !== '') {
+                $codes = preg_split('/[\s,]+/u', trim($codesRaw), -1, PREG_SPLIT_NO_EMPTY);
+                $codes = array_values(array_unique(array_map('trim', $codes)));
+            }
+
+            $k = 'hotlist:' . \Illuminate\Support\Str::uuid()->toString();
+            cache()->put($k, $codes, now()->addHour()); // TTL 1h (ajustable)
+
+            // Redirige a GET con los mismos filtros pero SIN hotel_codes y CON k
+            return redirect()->route('availability.search', array_merge(
+                $request->except(['_token', 'hotel_codes']),
+                ['k' => $k]
+            ));
+        }
+
+        // === SEGUNDA FASE: GET normal (con o sin 'k') ===
+        // En GET permitimos que ni 'hotel_codes' ni 'codzge' estén si viene 'k'
         $validated = $request->validate([
             'fecini'       => 'required|date',
             'fecfin'       => 'required|date|after_or_equal:fecini',
-            'codzge'       => 'required_without:hotel_codes|string|nullable',
-            'hotel_codes'  => 'required_without:codzge|string|nullable',
+            'k'            => 'sometimes|string|nullable',
+            'codzge'       => 'required_without_all:hotel_codes,k|string|nullable',
+            'hotel_codes'  => 'required_without_all:codzge,k|string|nullable',
             'numadl'       => 'required|integer|min:1',
             'page'         => 'sometimes|integer|min:1',
             'mode'         => 'sometimes|in:fast,full',
@@ -82,10 +130,9 @@ class AvailabilityController extends Controller
         $fecini = date('d/m/Y', strtotime($validated['fecini']));
         $fecfin = date('d/m/Y', strtotime($validated['fecfin']));
 
-        // Pool “histórico” (solo métrica)
+        // Métricas
         $poolSize    = 300;
         $currentPage = max(1, (int)$request->input('page', 1));
-
         $perf = [
             'db_ms'          => 0,
             'http_ms'        => 0,
@@ -105,15 +152,17 @@ class AvailabilityController extends Controller
         ];
         $t_app0 = microtime(true);
 
-        // Parseo lista manual (si viene)
+        // Parseo lista manual (desde k o desde hotel_codes)
         $manualCodes = [];
-        if (!empty($validated['hotel_codes'])) {
+        $k = $request->query('k');
+        if ($k) {
+            $manualCodes = (array) (cache()->get($k, []));
+        } elseif (!empty($validated['hotel_codes'])) {
             $raw = preg_split('/[,\s]+/u', trim($validated['hotel_codes']));
             $manualCodes = array_values(array_filter(array_unique(array_map('trim', $raw)), fn($v) => $v !== ''));
         }
 
-        // ¿Usar modo ZONA nativo del proveedor?
-        // AHORA: solo si pides explícitamente source=provider
+        // ¿Usar modo ZONA nativo del proveedor? (solo si source=provider y NO hay lista manual)
         $usingZoneMode = empty($manualCodes) && !empty($validated['codzge']) && $source === 'provider';
 
         // Concurrency/Timeouts comunes
@@ -121,8 +170,6 @@ class AvailabilityController extends Controller
         $connectTimeout = $complete ? 1.0 : 0.7;
         $requestTimeout = $complete ? 8.0 : 3.5;
         $earlyStop      = ($mode !== 'full');
-
-        // margen +2s para evitar cURL 28 cuando timeoutMs es justo
         if ($timeoutMs) {
             $requestTimeout = max($requestTimeout, min(60.0, ($timeoutMs / 1000.0) + 2.0));
         }
@@ -151,7 +198,7 @@ class AvailabilityController extends Controller
         $firstPayload   = null;
         $zoneTotalHotels = 0;
 
-        // Helper retry (usado en modo zona)
+        // Helper retry (modo zona)
         $doPostWithRetry = function (\GuzzleHttp\Client $client, string $endpoint, string $body, array &$reqMetrics, int $maxRetries = 2) {
             $attempt = 0;
             $delayMs = 300;
@@ -195,7 +242,8 @@ class AvailabilityController extends Controller
             $perf['db_ms'] += (int) round((microtime(true) - $t_db0) * 1000);
 
             $buildXmlZone = function (int $indpag) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
-                $traduc    = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>";
+                // 🔧 Añadimos codral# para que llegue el régimen traducido
+                $traduc    = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>\n  <traduc>codral#</traduc>";
                 $numrstXml = $numrst ? "  <numrst>{$numrst}</numrst>\n" : "  <numrst>200</numrst>\n";
                 $codnacXml = $codnac ? "  <codnac>{$codnac}</codnac>\n" : "";
                 $codzge    = e($validated['codzge']);
@@ -611,13 +659,9 @@ XML;
         $offset = ($currentPage - 1) * $perPage;
         $visibleHotels = array_slice($allHotels, $offset, $perPage);
 
-        // >>> ADDED: enriquecer cada hotel visible con totales y desglose por proveedor
+        // Enriquecer cada hotel visible con totales y desglose por proveedor
         foreach ($visibleHotels as &$h) {
-            // total de tarifas (nº de rooms). Si tu estructura tiene subniveles (p.ej. $room['rates']),
-            // ajusta este contador a tu realidad de "tarifa".
             $h['rate_count'] = is_countable($h['rooms'] ?? null) ? count($h['rooms']) : 0;
-
-            // recuento por proveedor (codtou) ordenado desc
             $provCounts = [];
             foreach ($h['rooms'] ?? [] as $r) {
                 $p = (string)($r['codtou'] ?? '');
@@ -628,7 +672,6 @@ XML;
             $h['provider_counts'] = $provCounts;
         }
         unset($h);
-        // <<< ADDED
 
         $hotelRateCountsPage = [];
         foreach ($visibleHotels as $h) {
@@ -838,7 +881,7 @@ XML;
                 'from_zone'    => $validated['codzge'] ?? null,
                 'manual_codes' => !empty($manualCodes),
                 'zone_total'   => $zoneTotalHotels,
-                'source'       => $source,   // ← añadido
+                'source'       => $source,
             ],
             'providers'            => array_keys($providerRateCounts ?? []),
             'hotelProviderMatrix'  => [],
@@ -847,6 +890,7 @@ XML;
             'payload_meta'         => $payloadMeta,
         ]);
     }
+
 
 
 
