@@ -611,6 +611,25 @@ XML;
         $offset = ($currentPage - 1) * $perPage;
         $visibleHotels = array_slice($allHotels, $offset, $perPage);
 
+        // >>> ADDED: enriquecer cada hotel visible con totales y desglose por proveedor
+        foreach ($visibleHotels as &$h) {
+            // total de tarifas (nº de rooms). Si tu estructura tiene subniveles (p.ej. $room['rates']),
+            // ajusta este contador a tu realidad de "tarifa".
+            $h['rate_count'] = is_countable($h['rooms'] ?? null) ? count($h['rooms']) : 0;
+
+            // recuento por proveedor (codtou) ordenado desc
+            $provCounts = [];
+            foreach ($h['rooms'] ?? [] as $r) {
+                $p = (string)($r['codtou'] ?? '');
+                if ($p === '') continue;
+                $provCounts[$p] = ($provCounts[$p] ?? 0) + 1;
+            }
+            arsort($provCounts);
+            $h['provider_counts'] = $provCounts;
+        }
+        unset($h);
+        // <<< ADDED
+
         $hotelRateCountsPage = [];
         foreach ($visibleHotels as $h) {
             $code = $h['code'];
@@ -785,7 +804,7 @@ XML;
                     'source'       => $source,
                 ],
                 'providers'             => array_keys($providerRateCounts ?? []),
-                'hotel_provider_matrix' => [], // (omite para JSON si no lo necesitas)
+                'hotel_provider_matrix' => [],
                 'payloads'              => $allPayloads,
                 'payload_meta'          => $payloadMeta,
                 'payload_preview'       => $payloadPreview,
@@ -822,12 +841,13 @@ XML;
                 'source'       => $source,   // ← añadido
             ],
             'providers'            => array_keys($providerRateCounts ?? []),
-            'hotelProviderMatrix'  => [], // si tu vista lo usa, puedes mantener el cálculo original
+            'hotelProviderMatrix'  => [],
             'firstPayload'         => $payloadPreview,
             'payloads'             => $allPayloads,
             'payload_meta'         => $payloadMeta,
         ]);
     }
+
 
 
 

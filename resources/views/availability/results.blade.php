@@ -530,6 +530,29 @@
                     <p class="text-sm text-gray-500 mb-1">⭐ Categoría: {{ $hotel['category'] }}</p>
                     <p class="text-sm text-gray-500">🏷 Código: {{ $hotel['code'] }} | 📍 Zona: {{ $hotel['zone'] }}</p>
                 </div>
+                {{-- 📦 Tarifas por proveedor (por hotel) --}}
+                @php
+                // Si el controller no lo preparó, lo calculamos aquí por hotel:
+                $provCounts = collect($hotel['rooms'] ?? [])
+                ->map(fn($r) => $r['codtou'] ?? '')
+                ->filter()
+                ->countBy()
+                ->sortDesc()
+                ->toArray();
+                @endphp
+
+                @if(!empty($provCounts))
+                <div class="card mb-4">
+                    <p class="text-gray-700 text-sm font-semibold mb-2">📦 Tarifas por proveedor</p>
+                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-0.5">
+                        @foreach($provCounts as $prov => $cnt)
+                        <li><strong>{{ $prov }}</strong>: {{ $cnt }} tarifas</li>
+                        @endforeach
+                    </ul>
+                </div>
+                @endif
+
+
                 <div class="mb-4">
                     <details class="group">
                         <summary class="flex items-center justify-between cursor-pointer select-none">
@@ -548,8 +571,23 @@
                             @foreach ($hotel['rooms'] as $room)
                             <li class="room-item">
                                 <div class="room-left">
+                                    @php
+                                    
+
+                                    $rawType = $room['room_type'] ?? '';
+                                    $rawBoard = $room['board'] ?? '';
+
+                                    // Solo lo que viene después de '#'
+                                    $typeLabel = is_string($rawType) ? trim(Str::after($rawType, '#')) : '—';
+                                    $boardLabel = is_string($rawBoard) ? trim(Str::after($rawBoard, '#')) : '—';
+
+                                    // Si no hay '#', usa el valor original
+                                    if ($typeLabel === '' && $rawType) $typeLabel = $rawType;
+                                    if ($boardLabel === '' && $rawBoard) $boardLabel = $rawBoard;
+                                    @endphp
+
                                     <p class="room-title">
-                                        {{ $room['room_type'] ?: '—' }} <span class="text-slate-400">—</span> {{ $room['board'] ?: '—' }}
+                                        {{ $typeLabel }} <span class="text-slate-400">—</span> {{ $boardLabel }}
                                     </p>
                                     <p class="room-meta">
                                         💶 {{ number_format($room['price_per_night'], 2) }} {{ $hotel['currency'] }}
@@ -559,6 +597,13 @@
                                         </span>
                                         @endif
                                     </p>
+
+                                    {{-- 👇 NUEVO: Proveedor debajo del precio --}}
+                                    @if(!empty($room['codtou']))
+                                    <p class="mt-1 text-xs text-slate-600">
+                                        🏷️ Proveedor: <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
+                                    </p>
+                                    @endif
                                 </div>
 
                                 <div class="room-right">
@@ -575,6 +620,8 @@
                                         <input type="hidden" name="room_code" value="{{ $room['room_code'] }}">
                                         <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] }}">
                                         <input type="hidden" name="room_internal_id" value="{{ $room['room_internal_id'] }}">
+                                        <input type="hidden" name="provider" value="{{ $room['codtou'] ?? '' }}">
+
 
                                         <button type="submit" class="btn-sel select-btn">
                                             <span class="label">Seleccionar</span>
