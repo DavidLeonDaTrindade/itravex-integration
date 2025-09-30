@@ -101,17 +101,6 @@
                 <p class="mt-1 text-xs text-slate-500">Se aplica en <strong>source=provider</strong> (paginación nativa indpag/numrst)</p>
               </div>
 
-              <div>
-                <label for="per_page" class="block text-sm font-medium text-slate-700">Tamaño de página UI (per_page)</label>
-                <input id="per_page" type="number" name="per_page" min="1" max="500" value="{{ old('per_page', 30) }}" placeholder="30"
-                       class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
-              </div>
-
-              <div>
-                <label for="batch_size" class="block text-sm font-medium text-slate-700">Tamaño de lote (batch_size)</label>
-                <input id="batch_size" type="number" name="batch_size" min="1" max="200" value="{{ old('batch_size', 50) }}" placeholder="50"
-                       class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
-              </div>
 
               {{-- Credenciales opcionales --}}
               <div class="md:col-span-2 rounded-xl border border-slate-200 p-4">

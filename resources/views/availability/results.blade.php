@@ -122,6 +122,115 @@
             box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
         }
     </style>
+    <style>
+        /* Etiquetas/badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            font: 700 .72rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            padding: .25rem .45rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            border: 1px solid rgba(0, 0, 0, .06);
+        }
+
+        /* Interna = dorado corporativo */
+        .badge-internal {
+            background: #FFF4D6;
+            color: #8A5A00;
+            border-color: #FDB31B;
+        }
+
+        /* Resaltado de la fila de habitación interna */
+        .room-item.is-internal {
+            position: relative;
+            background: #FFF9EC;
+            /* fondo cálido */
+            border-color: #FDB31B;
+            /* borde dorado */
+            box-shadow: 0 4px 14px rgba(253, 179, 27, .28);
+        }
+
+        /* Barra lateral izquierda como acento */
+        .room-item.is-internal::before {
+            content: "";
+            position: absolute;
+            left: -1px;
+            top: -1px;
+            bottom: -1px;
+            width: 6px;
+            background: linear-gradient(180deg, #FDB31B 0%, #FFC75A 100%);
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        /* Mini etiqueta “INTERNAL” arriba a la derecha */
+        .room-item.is-internal .flag-internal {
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: #004665;
+            color: #fff;
+            padding: .2rem .5rem;
+            border-radius: .35rem;
+            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+            letter-spacing: .02em;
+        }
+    </style>
+    <style>
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            font: 700 .72rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            padding: .25rem .45rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            border: 1px solid rgba(0, 0, 0, .06);
+        }
+
+        .badge-internal {
+            background: #FFF4D6;
+            color: #8A5A00;
+            border-color: #FDB31B;
+        }
+
+        .room-item.is-internal {
+            position: relative;
+            background: #FFF9EC;
+            border-color: #FDB31B;
+            box-shadow: 0 4px 14px rgba(253, 179, 27, .28);
+        }
+
+        .room-item.is-internal::before {
+            content: "";
+            position: absolute;
+            left: -1px;
+            top: -1px;
+            bottom: -1px;
+            width: 6px;
+            background: linear-gradient(180deg, #FDB31B 0%, #FFC75A 100%);
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        .room-item.is-internal .flag-internal {
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: #004665;
+            color: #fff;
+            padding: .2rem .5rem;
+            border-radius: .35rem;
+            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+            letter-spacing: .02em;
+        }
+    </style>
+
+
 
 
     @section('content')
@@ -157,6 +266,10 @@
     if ($zoneTotal && $hotelCodesIn === '' && $fromZone) {
     $sourceNote .= " (hoteles en BD: {$zoneTotal})";
     }
+    @endphp
+    @php
+    // Proveedores internos (mismo criterio que en el controller)
+    $internalCodtous = array_map('strtoupper', config('itravex.internal_codtous', ['LIB']));
     @endphp
 
     @if(request()->hasAny(['codzge','hotel_codes','fecini','fecfin','numadl']) || $codnacEff || $timeoutEff)
@@ -329,7 +442,13 @@
                 <p class="text-gray-700 text-sm font-semibold mb-2">📦 Tarifas por proveedor</p>
                 <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
                     @foreach($providerRateCounts as $provider => $count)
-                    <li><strong>{{ $provider }}</strong>: {{ $count }} tarifas</li>
+                    @php $provUpper = strtoupper($provider); $isIntProv = in_array($provUpper, $internalCodtous, true); @endphp
+                    <li>
+                        <strong>{{ $provider }}</strong>: {{ $count }} tarifas
+                        @if($isIntProv)
+                        <span class="badge badge-internal ml-2">Internas</span>
+                        @endif
+                    </li>
                     @endforeach
                 </ul>
             </div>
@@ -546,7 +665,14 @@
                     <p class="text-gray-700 text-sm font-semibold mb-2">📦 Tarifas por proveedor</p>
                     <ul class="list-disc list-inside text-sm text-gray-700 space-y-0.5">
                         @foreach($provCounts as $prov => $cnt)
-                        <li><strong>{{ $prov }}</strong>: {{ $cnt }} tarifas</li>
+                        @php $provUpper = strtoupper($prov); $isIntProv = in_array($provUpper, $internalCodtous, true); @endphp
+                        <li>
+                            <strong>{{ $prov }}</strong>: {{ $cnt }} tarifas
+                            @if($isIntProv)
+                            <span class="badge badge-internal ml-2">Interna</span>
+                            @endif
+                        </li>
+
                         @endforeach
                     </ul>
                 </div>
@@ -569,52 +695,57 @@
 
                         <ul class="space-y-2 mt-3">
                             @foreach ($hotel['rooms'] as $room)
-                            <li class="room-item">
+                            @php
+                            $codtou = strtoupper((string)($room['codtou'] ?? ''));
+                            $isInternalRoom = $codtou !== '' && in_array($codtou, $internalCodtous, true);
+
+                            // helpers
+                            $afterHash = function ($v) {
+                            if (!is_string($v) || $v === '') return '';
+                            $pos = strpos($v, '#');
+                            return $pos === false ? trim($v) : trim(substr($v, $pos + 1));
+                            };
+                            $removeSuffix = function ($text, $suffix) {
+                            $len = strlen($suffix);
+                            if ($len > 0 && substr($text, -$len) === $suffix) return substr($text, 0, -$len);
+                            return $text;
+                            };
+
+                            // fuentes
+                            $rawSmo = $room['codsmo'] ?? ($room['room_type'] ?? '');
+                            $rawCha = $room['codcha'] ?? ($room['room_code'] ?? '');
+                            $rawRal = $room['codral'] ?? ($room['board'] ?? '');
+                            $infrcl = $room['infrcl'] ?? ($room['infrcl_text'] ?? '');
+
+                            // labels limpios
+                            $smoLabel = $afterHash($rawSmo);
+                            $chaLabel = $afterHash($rawCha);
+                            $ralLabel = $afterHash($rawRal);
+
+                            if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                            $parts = explode('!~', $infrcl);
+                            $last = trim(end($parts));
+                            $first = strtok($last, '_');
+                            if ($first !== false) {
+                            $first = $removeSuffix($first, 'Room');
+                            $chaLabel = trim($first);
+                            }
+                            }
+
+                            $roomParts = [];
+                            if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                            if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+
+                            $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                            $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+                            @endphp
+
+                            <li class="room-item {{ $isInternalRoom ? 'is-internal' : '' }}">
+                                @if($isInternalRoom)
+                                <span class="flag-internal">INTERNA</span>
+                                @endif
+
                                 <div class="room-left">
-                                    @php
-                                    // --- helpers ---
-                                    $afterHash = function ($v) {
-                                    if (!is_string($v) || $v === '') return '';
-                                    $pos = strpos($v, '#');
-                                    return $pos === false ? trim($v) : trim(substr($v, $pos + 1));
-                                    };
-                                    $removeSuffix = function ($text, $suffix) {
-                                    $len = strlen($suffix);
-                                    if ($len > 0 && substr($text, -$len) === $suffix) return substr($text, 0, -$len);
-                                    return $text;
-                                    };
-
-                                    // --- fuentes ---
-                                    $rawSmo = $room['codsmo'] ?? ($room['room_type'] ?? '');
-                                    $rawCha = $room['codcha'] ?? ($room['room_code'] ?? '');
-                                    $rawRal = $room['codral'] ?? ($room['board'] ?? '');
-                                    $infrcl = $room['infrcl'] ?? ($room['infrcl_text'] ?? '');
-
-                                    // --- labels limpios ---
-                                    $smoLabel = $afterHash($rawSmo); // ej: "Room" o "Double/twin"
-                                    $chaLabel = $afterHash($rawCha); // ej: "Superior", "Standard"
-                                    $ralLabel = $afterHash($rawRal); // ej: "Room only", "Bed and breakfast"
-
-                                    // Inferir codcha desde infrcl si no viene
-                                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
-                                    $parts = explode('!~', $infrcl);
-                                    $last = trim(end($parts)); // "SuperiorRoom_Refundable..."
-                                    $first = strtok($last, '_'); // "SuperiorRoom"
-                                    if ($first !== false) {
-                                    $first = $removeSuffix($first, 'Room'); // "Superior"
-                                    $chaLabel = trim($first);
-                                    }
-                                    }
-
-                                    // Tipo (codsmo + codcha evitando duplicado)
-                                    $roomParts = [];
-                                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
-                                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
-
-                                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
-                                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
-                                    @endphp
-
                                     <p class="room-title">
                                         <span class="font-semibold text-slate-700">Tipo -</span>
                                         {{ $roomDesc }}
@@ -635,15 +766,18 @@
 
                                     @if(!empty($room['codtou']))
                                     <p class="mt-1 text-xs text-slate-600">
-                                        🏷️ Proveedor: <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
+                                        🏷️ Proveedor:
+                                        <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
+                                        @if($isInternalRoom)
+                                        <span class="badge badge-internal ml-2">Interna</span>
+                                        @endif
                                     </p>
                                     @endif
                                 </div>
-
                             </li>
-
                             @endforeach
                         </ul>
+
                     </details>
                 </div>
 

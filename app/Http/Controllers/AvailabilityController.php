@@ -175,6 +175,7 @@ class AvailabilityController extends Controller
         }
 
         $endpoint = $cfg['endpoint'];
+        $internalCodtous = array_map('strtoupper', (array)($cfg['internal_codtous'] ?? ['LIB']));
 
         // Métricas/red comunes
         $reqMetrics   = [];
@@ -332,8 +333,8 @@ XML;
 
                     $rooms = [];
                     foreach ($hotel->infhab as $room) {
-                        $isInternal = isset($room->codtrf) || isset($room->inftrf);
-                        $codtou     = (string) $room->codtou;
+                        $codtou     = strtoupper((string) $room->codtou);
+                        $isInternal = in_array($codtou, $internalCodtous, true);
 
                         $providerRateCounts[$codtou] = ($providerRateCounts[$codtou] ?? 0) + 1;
 
@@ -342,13 +343,9 @@ XML;
                             $providerHotelSets[$codtou][$codser] = true;
                         }
 
-                        if (!isset($hotelRateCounts[$codser])) {
-                            $hotelRateCounts[$codser] = ['name' => $hotelName ?: $codser, 'count' => 0];
-                        }
-                        $hotelRateCounts[$codser]['count']++;
-
-                        if ($isInternal) $internalRateCount++;
-                        else {
+                        if ($isInternal) {
+                            $internalRateCount++;
+                        } else {
                             $externalRateCount++;
                             if ($codtou === 'ALW') $externalALWRates++;
                         }
@@ -585,8 +582,8 @@ XML;
 
                         $rooms = [];
                         foreach ($hotel->infhab as $room) {
-                            $isInternal = isset($room->codtrf) || isset($room->inftrf);
-                            $codtou     = (string) $room->codtou;
+                            $codtou     = strtoupper((string) $room->codtou);
+                            $isInternal = ($codtou === 'LIB'); // SOLO LIB es interna
 
                             $providerRateCounts[$codtou] = ($providerRateCounts[$codtou] ?? 0) + 1;
 
