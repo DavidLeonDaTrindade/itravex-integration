@@ -98,8 +98,9 @@ class AvailabilityController extends Controller
         }
         session(['provider_cfg' => $cfg]);
 
-        $mode       = $request->input('mode', 'fast');
-        $complete   = ($mode === 'full');
+        $maxConcurrency = 8;          // antes dependía de $complete
+        $connectTimeout = 1.0;
+        $requestTimeout = 8.0;
 
         $timeoutMs  = $request->filled('timeout') ? (int)$request->input('timeout') : 10000;
         $numrst     = $request->filled('numrst')  ? (int)$request->input('numrst')  : null;
@@ -165,12 +166,14 @@ class AvailabilityController extends Controller
         // ¿Usar modo ZONA nativo del proveedor? (solo si source=provider y NO hay lista manual)
         $usingZoneMode = empty($manualCodes) && !empty($validated['codzge']) && $source === 'provider';
 
-        // Concurrency/Timeouts comunes
-        $maxConcurrency = $complete ? 8  : 10;
-        $connectTimeout = $complete ? 1.0 : 0.7;
-        $requestTimeout = $complete ? 8.0 : 3.5;
-        $earlyStop      = ($mode !== 'full');
+        // Siempre modo completo (sin atajos/recorte)
+        $maxConcurrency = 8;
+        $connectTimeout = 1.0;
+        $requestTimeout = 8.0;
+        $earlyStop      = false;
+
         if ($timeoutMs) {
+            // Respeta un timeout de request en función del timout del proveedor
             $requestTimeout = max($requestTimeout, min(60.0, ($timeoutMs / 1000.0) + 2.0));
         }
 
@@ -374,7 +377,7 @@ XML;
                 $expected = (int)($numrst ?: 200);
                 if ($returned < $expected) break;
                 $indpag++;
-                if ($earlyStop && $receivedHotels >= $perPage) break;
+                
             } while (true);
 
             $perf['http_ms'] = (int) round((microtime(true) - $t_http0) * 1000);
