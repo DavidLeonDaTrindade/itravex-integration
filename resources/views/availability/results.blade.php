@@ -233,10 +233,12 @@
 
 
 
+
     @section('content')
     {{-- Resumen de la petición enviada (usando valores efectivos) --}}
     @php
     $eff = $effective ?? [];
+    $roomsEff = is_array($eff['rooms'] ?? null) ? $eff['rooms'] : (isset($rooms) && is_array($rooms) ? $rooms : null);
     $codnacEff = $eff['codnac'] ?? null; // p.ej. de config si no lo envía el usuario
     $timeoutEff = $eff['timeout_ms'] ?? null; // timeout real que se envía al proveedor
     $perPageEff = $eff['per_page'] ?? null; // tamaño de página UI
@@ -249,10 +251,37 @@
     $hotelCodesIn = trim((string) request('hotel_codes',''));
     $feciniIn = request('fecini');
     $fecfinIn = request('fecfin');
-    $numadlIn = request('numadl');
+    $numadlIn = request('numadl'); // compat single-room antiguo
     $codnacIn = strtoupper((string) request('codnac',''));
     $timeoutIn = request('timeout');
     $numrstIn = request('numrst');
+
+    // ---- OCUPACIÓN (multi/single) ----
+    // Si no llegó en effective ni en $rooms, probamos con la query (casos sin PRG)
+    $roomsReq = request()->has('rooms') ? (array) request('rooms') : [];
+    $roomsSrc = collect($roomsEff ?? $roomsReq);
+
+    $adlFromRooms = (int) $roomsSrc->sum(fn($r) => (int) ($r['adl'] ?? $r['numadl'] ?? $r['adults'] ?? 0));
+    $chdNumRooms = (int) $roomsSrc->sum(fn($r) => (int) ($r['chd'] ?? $r['numnin'] ?? $r['numchd'] ?? $r['children'] ?? 0));
+    $chdAgesRooms = (int) $roomsSrc->sum(function ($r) {
+    $ages = $r['ages'] ?? $r['edades'] ?? [];
+    return is_array($ages) ? count(array_filter($ages, fn($a) => $a !== '' && $a !== null)) : 0;
+    });
+
+    // Fallbacks top-level (formularios antiguos)
+    $topAdl = (int) (request('numadl') ?? request('adl') ?? request('adults') ?? 0);
+    $topChd = (int) (request('numnin') ?? request('numchd') ?? request('chd') ?? request('children') ?? 0);
+    $topAges = request()->input('ages', request()->input('edades', []));
+    $topChdFromAges = is_array($topAges) ? (int) count(array_filter($topAges, fn($a) => $a !== '' && $a !== null)) : 0;
+
+    // Totales (evitando doble conteo)
+    $adlTotal = $adlFromRooms > 0 ? $adlFromRooms : $topAdl;
+    $chdTotal = max(max($chdNumRooms, $chdAgesRooms), max($topChd, $topChdFromAges));
+
+    // Texto final
+    $occupSummary = ($adlTotal || $chdTotal)
+    ? trim(($adlTotal ? "Adultos: {$adlTotal}" : '') . ($chdTotal ? ($adlTotal ? ' · ' : '') . "Niños: {$chdTotal}" : ''))
+    : '—';
 
     // Fallbacks “bonitos”
     $codnacShown = $codnacEff ?: ($codnacIn ?: '—');
@@ -266,8 +295,7 @@
     if ($zoneTotal && $hotelCodesIn === '' && $fromZone) {
     $sourceNote .= " (hoteles en BD: {$zoneTotal})";
     }
-    @endphp
-    @php
+
     // Proveedores internos (mismo criterio que en el controller)
     $internalCodtous = array_map('strtoupper', config('itravex.internal_codtous', ['LIB']));
     @endphp
@@ -299,8 +327,8 @@
                 <dd>{{ $fecfinIn ?: '—' }}</dd>
             </div>
             <div>
-                <dt class="font-medium text-slate-600">Adultos</dt>
-                <dd>{{ $numadlIn ?: '—' }}</dd>
+                <dt class="font-medium text-slate-600">Ocupación</dt>
+                <dd>{{ $occupSummary }}</dd>
             </div>
             <div>
                 <dt class="font-medium text-slate-600">País (codnac)</dt>
@@ -325,6 +353,8 @@
         </dl>
     </div>
     @endif
+
+
 
 
     <div id="top" class="max-w-7xl mx-auto px-6 py-10">
@@ -685,8 +715,18 @@
                             <h3 class="text-base font-semibold text-gray-700">
                                 Habitaciones
                             </h3>
+                            @php
+                            // Ordena por precio de menor a mayor (maneja nulos/no numéricos)
+                            $roomsSorted = collect($hotel['rooms'] ?? [])
+                            ->sortBy(function ($r) {
+                            $p = $r['price_per_night'] ?? null;
+                            // convierte a float; si no es numérico, lo manda al final
+                            return is_numeric($p) ? (float) $p : INF;
+                            })
+                            ->values();
+                            @endphp
                             <span class="inline-flex items-center gap-2 text-sm text-indigo-600">
-                                {{ count($hotel['rooms']) }} disponibles
+                                {{ count($roomsSorted) }} disponibles
                                 <svg class="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                     <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
                                 </svg>
@@ -694,7 +734,7 @@
                         </summary>
 
                         <ul class="space-y-2 mt-3">
-                            @foreach ($hotel['rooms'] as $room)
+                            @foreach ($roomsSorted as $room)
                             @php
                             $codtou = strtoupper((string)($room['codtou'] ?? ''));
                             $isInternalRoom = $codtou !== '' && in_array($codtou, $internalCodtous, true);
@@ -756,7 +796,7 @@
                                     </p>
 
                                     <p class="room-meta">
-                                        💶 {{ number_format($room['price_per_night'], 2) }} {{ $hotel['currency'] }}
+                                        💶 {{ number_format((float)($room['price_per_night'] ?? 0), 2) }} {{ $hotel['currency'] }}
                                         @if (!empty($room['availability']))
                                         <span class="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
                                             {{ $room['availability'] }} disp.
@@ -774,12 +814,49 @@
                                     </p>
                                     @endif
                                 </div>
+
+                                {{-- === INSERTA AQUÍ EL FORMULARIO DE "Seleccionar" === --}}
+                                <div class="room-right">
+                                    {{-- Dentro del bucle de habitaciones, justo donde pintas cada $room --}}
+                                    <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
+                                        {{-- payload mínimo para el paso de bloqueo --}}
+                                        <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
+                                        <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
+                                        <input type="hidden" name="currency" value="{{ $hotel['currency'] }}">
+                                        <input type="hidden" name="start_date" value="{{ request('fecini') }}">
+                                        <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+
+                                        {{-- datos de la habitación seleccionada --}}
+                                        <input type="hidden" name="room_type" value="{{ $roomDesc }}">
+                                        <input type="hidden" name="board" value="{{ $boardDesc }}">
+                                        <input type="hidden" name="price_per_night" value="{{ $room['price_per_night'] }}">
+                                        <input type="hidden" name="provider" value="{{ $room['codtou'] ?? '' }}">
+                                        <input type="hidden" name="room_internal_id" value="{{ $room['room_internal_id'] ?? '' }}">
+
+                                        {{-- (opcional) ocupación multihabitación original --}}
+                                        @if (request()->has('rooms'))
+                                        @foreach ((array) request('rooms') as $ri => $r)
+                                        <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($r['adl'] ?? 1) }}">
+                                        <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($r['chd'] ?? 0) }}">
+                                        @foreach ((array)($r['ages'] ?? []) as $ai => $age)
+                                        <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
+                                        @endforeach
+                                        @endforeach
+                                        @endif
+
+                                        <button type="submit" class="btn-sel select-btn">
+                                            <span class="spinner" aria-hidden="true"></span>
+                                            <span class="label">Seleccionar</span>
+                                        </button>
+                                    </form>
+                                </div>
+                                {{-- === FIN DEL FORM === --}}
                             </li>
                             @endforeach
                         </ul>
-
                     </details>
                 </div>
+
 
 
 

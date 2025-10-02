@@ -10,7 +10,7 @@
       <div class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="p-6 md:p-8">
 
-          <form method="POST" action="{{ route('availability.search') }}" class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <form method="POST" action="{{ route('availability.search') }}" autocomplete="off" class="grid grid-cols-1 gap-6 md:grid-cols-2">
             @csrf
 
             {{-- ======================== BÚSQUEDA POR ZONA ======================== --}}
@@ -71,11 +71,50 @@
                 class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
             </div>
 
-            <div>
-              <label for="numadl" class="block text-sm font-medium text-slate-700">Número de adultos</label>
-              <input id="numadl" type="number" name="numadl" min="1" value="{{ old('numadl', 2) }}" required
-                class="mt-1 block w-32 rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+            <!-- ===== Habitaciones (multihabitación con edades de niños) ===== -->
+            <div class="md:col-span-2 rounded-xl border border-slate-200 p-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-medium text-slate-700">Habitaciones</h3>
+                <button type="button" id="add-room"
+                  class="text-sm text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
+                  Añadir habitación
+                </button>
+              </div>
+
+              <!-- Template de una habitación -->
+              <template id="room-template">
+                <div class="room-row mt-4 rounded-lg border border-slate-200 p-4">
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-medium text-slate-700">Habitación <span class="room-index"></span></h4>
+                    <button type="button" class="remove-room text-xs text-red-600 hover:text-red-700">Quitar</button>
+                  </div>
+
+                  <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div>
+                      <label class="block text-sm font-medium text-slate-700">Adultos</label>
+                      <input type="number" min="1" max="4" name="rooms[__i__][adl]" value="2"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 adl-input" required />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-slate-700">Niños</label>
+                      <input type="number" min="0" max="3" name="rooms[__i__][chd]" value="0"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 chd-input" />
+                      <p class="mt-1 text-xs text-slate-500">Máx. personas/hab: 4</p>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-slate-700">Edades de los niños</label>
+                      <div class="ages-wrap grid grid-cols-3 gap-2">
+                        <!-- aquí se pintan los inputs de edades -->
+                      </div>
+                      <p class="mt-1 text-xs text-slate-500">Se generarán tantos campos como niños (0–17 años).</p>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <div id="rooms-container" class="mt-2"></div>
             </div>
+
 
             <div>
               <label for="codnac" class="block text-sm font-medium text-slate-700">Código de país (ISO 3166-1)</label>
@@ -367,5 +406,104 @@
       updateCounter();
     })();
   </script>
+  <script>
+    (function() {
+      const container = document.getElementById('rooms-container');
+      const tpl = document.getElementById('room-template');
+      const addBtn = document.getElementById('add-room');
+      if (!container || !tpl || !addBtn) return;
+
+      let idx = 0;
+
+      function renderIndexes() {
+        [...container.querySelectorAll('.room-row')].forEach((row, i) => {
+          const span = row.querySelector('.room-index');
+          if (span) span.textContent = i + 1;
+        });
+      }
+
+      function syncCapacity(row) {
+        const adl = row.querySelector('.adl-input');
+        const chd = row.querySelector('.chd-input');
+        const agesWrap = row.querySelector('.ages-wrap');
+
+        const a = parseInt(adl.value || '0', 10);
+        const c = parseInt(chd.value || '0', 10);
+
+        // Regla: >=1 adulto y máx. 4 personas/hab
+        if (a < 1) {
+          adl.setCustomValidity('Debe haber al menos 1 adulto');
+        } else {
+          adl.setCustomValidity('');
+        }
+        if (a + c > 4) {
+          chd.setCustomValidity('Máximo 4 personas por habitación');
+        } else {
+          chd.setCustomValidity('');
+        }
+
+        // Generar inputs de edades = nº de niños
+        const current = agesWrap.querySelectorAll('input[type="number"]').length;
+        const target = Math.max(0, Math.min(3, c));
+        if (current !== target) {
+          agesWrap.innerHTML = '';
+          for (let i = 0; i < target; i++) {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '0';
+            input.max = '17';
+            input.required = true;
+            input.placeholder = 'Edad';
+            input.name = `rooms[${row.dataset.idx}][ages][${i}]`;
+            input.className = 'rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 w-full';
+            agesWrap.appendChild(input);
+          }
+        }
+      }
+
+      function addRoom(defaults = {
+        adl: 2,
+        chd: 0
+      }) {
+        const node = document.importNode(tpl.content, true);
+        const row = node.firstElementChild;
+        row.dataset.idx = idx;
+
+        // Reemplaza __i__ por índice real en los names
+        row.innerHTML = row.innerHTML
+          .replaceAll('rooms[__i__][adl]', `rooms[${idx}][adl]`)
+          .replaceAll('rooms[__i__][chd]', `rooms[${idx}][chd]`);
+
+        container.appendChild(row);
+
+        // Set defaults
+        const adl = row.querySelector('.adl-input');
+        const chd = row.querySelector('.chd-input');
+        if (adl) adl.value = defaults.adl ?? 2;
+        if (chd) chd.value = defaults.chd ?? 0;
+
+        // Eventos
+        adl.addEventListener('input', () => syncCapacity(row));
+        chd.addEventListener('input', () => syncCapacity(row));
+        row.querySelector('.remove-room')?.addEventListener('click', () => {
+          row.remove();
+          renderIndexes();
+        });
+
+        // Inicializar
+        syncCapacity(row);
+        idx++;
+        renderIndexes();
+      }
+
+      addBtn.addEventListener('click', () => addRoom());
+      // Crea una habitación por defecto
+      addRoom({
+        adl: 2,
+        chd: 0
+      });
+    })();
+  </script>
+
 
 </x-app-layout>

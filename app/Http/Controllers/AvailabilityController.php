@@ -17,80 +17,171 @@ use GuzzleHttp\Promise\EachPromise;
 
 class AvailabilityController extends Controller
 {
+    // ✅ NUEVO: normaliza y valida reglas de negocio de habitaciones (adl+chd <= 4)
+    private function normalizeRooms(array $rooms): array
+    {
+        $out = [];
+        foreach ($rooms as $i => $r) {
+            $adl = max(0, (int)($r['adl'] ?? 0));
+            $chd = max(0, (int)($r['chd'] ?? 0));
+            $ages = array_values(array_filter(array_map(
+                fn($v) => is_numeric($v) ? (int)$v : null,
+                (array)($r['ages'] ?? [])
+            ), fn($v) => $v !== null));
+
+            // Reglas de negocio
+            if ($adl < 1) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "rooms.$i.adl" => "Debe haber al menos 1 adulto en la habitación " . ($i + 1),
+                ]);
+            }
+            if ($adl + $chd > 4) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "rooms.$i.chd" => "Máximo 4 personas por habitación en la habitación " . ($i + 1),
+                ]);
+            }
+            if ($chd !== count($ages)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "rooms.$i.ages" => "Indica exactamente $chd edad(es) de niño(s) en la habitación " . ($i + 1),
+                ]);
+            }
+            foreach ($ages as $k => $age) {
+                if ($age < 0 || $age > 17) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        "rooms.$i.ages.$k" => "La edad del niño debe estar entre 0 y 17 en la habitación " . ($i + 1),
+                    ]);
+                }
+            }
+
+            $out[] = ['adl' => $adl, 'chd' => $chd, 'ages' => $ages];
+        }
+        if (empty($out)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                "rooms" => "Debes indicar al menos una habitación.",
+            ]);
+        }
+        return $out;
+    }
+
+    // ✅ NUEVO: genera el XML <distri>…</distri> para todas las habitaciones
+    private function buildDistriXml(array $rooms): string
+    {
+        $blocks = [];
+        foreach ($rooms as $i => $r) {
+            $id = $i + 1;
+            $lines = [];
+            $lines[] = "  <distri id=\"{$id}\">";
+            $lines[] = "    <numuni>1</numuni>";
+            $lines[] = "    <numadl>{$r['adl']}</numadl>";
+            if ($r['chd'] > 0) {
+                $lines[] = "    <numnin>{$r['chd']}</numnin>";
+                foreach ($r['ages'] as $age) {
+                    $lines[] = "    <edanin>{$age}</edanin>";
+                }
+            }
+            $lines[] = "  </distri>";
+            $blocks[] = implode("\n", $lines);
+        }
+        return implode("\n", $blocks);
+    }
+
     public function checkAvailability(Request $request)
     {
         // === PRIMERA FASE: si llega POST, guardamos hotel_codes en cache y redirigimos a GET con 'k' (PRG) ===
         if ($request->isMethod('post')) {
             // Validación en POST (igual que la tuya)
+            // 🔁 CAMBIO: validación POST (quitamos numadl y añadimos rooms[])
             $validated = $request->validate([
-                'fecini'       => 'required|date',
-                'fecfin'       => 'required|date|after_or_equal:fecini',
-                'codzge'       => 'required_without:hotel_codes|string|nullable',
-                'hotel_codes'  => 'required_without:codzge|string|nullable',
-                'numadl'       => 'required|integer|min:1',
-                'page'         => 'sometimes|integer|min:1',
-                'mode'         => 'sometimes|in:fast,full',
+                'fecini'      => 'required|date',
+                'fecfin'      => 'required|date|after_or_equal:fecini',
+                'codzge'      => 'required_without:hotel_codes|string|nullable',
+                'hotel_codes' => 'required_without:codzge|string|nullable',
+
+                // ✅ multi-hab
+                'rooms'          => 'required|array|min:1',
+                'rooms.*.adl'    => 'required|integer|min:1|max:4',
+                'rooms.*.chd'    => 'nullable|integer|min:0|max:3',
+                'rooms.*.ages'   => 'nullable|array',
+                'rooms.*.ages.*' => 'nullable|integer|min:0|max:17',
+
+                'page'        => 'sometimes|integer|min:1',
+                // modo eliminado, pero si aún llega lo ignoramos
+                'mode'        => 'sometimes|in:full,fast',
+
                 // Opcionales
-                'timeout'      => 'nullable|integer|min:1000|max:60000',
-                'numrst'       => 'nullable|integer|min:1|',
-                'batch_size'   => 'nullable|integer|min:1|max:200',
-                'per_page'     => 'sometimes|integer|min:1|max:500',
-                // Credenciales/endpoint opcionales
-                'endpoint'     => 'sometimes|url|nullable',
-                'codsys'       => 'sometimes|string|nullable',
-                'codage'       => 'sometimes|string|nullable',
-                'user'         => 'sometimes|string|nullable',
-                'pass'         => 'sometimes|string|nullable',
-                'codtou'       => 'sometimes|string|nullable',
-                // País ISO 3166-1 (2 o 3 letras)
-                'codnac'       => 'nullable|string|min:2|max:3',
+                'timeout'     => 'nullable|integer|min:1000|max:60000',
+                'numrst'      => 'nullable|integer|min:1|',
+                'batch_size'  => 'nullable|integer|min:1|max:200',
+                'per_page'    => 'sometimes|integer|min:1|max:500',
+                'endpoint'    => 'sometimes|url|nullable',
+                'codsys'      => 'sometimes|string|nullable',
+                'codage'      => 'sometimes|string|nullable',
+                'user'        => 'sometimes|string|nullable',
+                'pass'        => 'sometimes|string|nullable',
+                'codtou'      => 'sometimes|string|nullable',
+                'codnac'      => 'nullable|string|min:2|max:3',
             ]);
 
-            // Normaliza y guarda hotel_codes en cache (si vienen)
+            // ✅ normaliza y cachea rooms para la redirección (evita URLs largas)
+            $rooms = $this->normalizeRooms($validated['rooms']);
+            $rk = 'rooms:' . \Illuminate\Support\Str::uuid()->toString();
+            cache()->put($rk, $rooms, now()->addHour());
+
+            // ✅ hotel codes a cache (como ya tenías)
             $codesRaw = (string) ($validated['hotel_codes'] ?? '');
             $codes = [];
             if ($codesRaw !== '') {
                 $codes = preg_split('/[\s,]+/u', trim($codesRaw), -1, PREG_SPLIT_NO_EMPTY);
                 $codes = array_values(array_unique(array_map('trim', $codes)));
             }
-
             $k = 'hotlist:' . \Illuminate\Support\Str::uuid()->toString();
-            cache()->put($k, $codes, now()->addHour()); // TTL 1h (ajustable)
+            cache()->put($k, $codes, now()->addHour());
 
-            // Redirige a GET con los mismos filtros pero SIN hotel_codes y CON k
+            // ✅ Redirige a GET sin hotel_codes ni rooms, con k y rk
             return redirect()->route('availability.search', array_merge(
-                $request->except(['_token', 'hotel_codes']),
-                ['k' => $k]
+                $request->except(['_token', 'hotel_codes', 'rooms']),
+                ['k' => $k, 'rk' => $rk]
             ));
         }
 
         // === SEGUNDA FASE: GET normal (con o sin 'k') ===
         // En GET permitimos que ni 'hotel_codes' ni 'codzge' estén si viene 'k'
         $validated = $request->validate([
-            'fecini'       => 'required|date',
-            'fecfin'       => 'required|date|after_or_equal:fecini',
-            'k'            => 'sometimes|string|nullable',
-            'codzge'       => 'required_without_all:hotel_codes,k|string|nullable',
-            'hotel_codes'  => 'required_without_all:codzge,k|string|nullable',
-            'numadl'       => 'required|integer|min:1',
-            'page'         => 'sometimes|integer|min:1',
-            'mode'         => 'sometimes|in:fast,full',
-            // Opcionales
-            'timeout'      => 'nullable|integer|min:1000|max:60000',
-            'numrst'       => 'nullable|integer|min:1|',
-            'batch_size'   => 'nullable|integer|min:1|max:200',
-            'per_page'     => 'sometimes|integer|min:1|max:500',
-            // Credenciales/endpoint opcionales
-            'endpoint'     => 'sometimes|url|nullable',
-            'codsys'       => 'sometimes|string|nullable',
-            'codage'       => 'sometimes|string|nullable',
-            'user'         => 'sometimes|string|nullable',
-            'pass'         => 'sometimes|string|nullable',
-            'codtou'       => 'sometimes|string|nullable',
-            // País ISO 3166-1 (2 o 3 letras)
-            'codnac'       => 'nullable|string|min:2|max:3',
-        ]);
+            'fecini'      => 'required|date',
+            'fecfin'      => 'required|date|after_or_equal:fecini',
+            'k'           => 'sometimes|string|nullable',
+            'rk'          => 'sometimes|string|nullable',
+            'codzge'      => 'required_without_all:hotel_codes,k|string|nullable',
+            'hotel_codes' => 'required_without_all:codzge,k|string|nullable',
 
+            // si no viene rk, exigimos rooms en query (poco común, pero soportado)
+            'rooms'          => 'required_without:rk|array|min:1',
+            'rooms.*.adl'    => 'required_without:rk|integer|min:1|max:4',
+            'rooms.*.chd'    => 'nullable|integer|min:0|max:3',
+            'rooms.*.ages'   => 'nullable|array',
+            'rooms.*.ages.*' => 'nullable|integer|min:0|max:17',
+
+            'page'        => 'sometimes|integer|min:1',
+            'mode'        => 'sometimes|in:fast,full', // ignorado
+            'timeout'     => 'nullable|integer|min:1000|max:60000',
+            'numrst'      => 'nullable|integer|min:1|',
+            'batch_size'  => 'nullable|integer|min:1|max:200',
+            'per_page'    => 'sometimes|integer|min:1|max:500',
+            'endpoint'    => 'sometimes|url|nullable',
+            'codsys'      => 'sometimes|string|nullable',
+            'codage'      => 'sometimes|string|nullable',
+            'user'        => 'sometimes|string|nullable',
+            'pass'        => 'sometimes|string|nullable',
+            'codtou'      => 'sometimes|string|nullable',
+            'codnac'      => 'nullable|string|min:2|max:3',
+        ]);
+        $rooms = [];
+        if ($rk = $request->query('rk')) {
+            $rooms = (array) cache()->get($rk, []);
+        } elseif (!empty($validated['rooms'])) {
+            $rooms = (array) $validated['rooms'];
+        }
+        $rooms = $this->normalizeRooms($rooms); // lanza ValidationException si algo no cuadra
         // Config elegida (request -> config)
         $cfg = $this->getProviderConfig($request);
         if (empty($cfg['endpoint'])) {
@@ -245,12 +336,14 @@ class AvailabilityController extends Controller
             $zoneTotalHotels = \App\Models\Hotel::where('zone_code', $validated['codzge'])->count();
             $perf['db_ms'] += (int) round((microtime(true) - $t_db0) * 1000);
 
-            $buildXmlZone = function (int $indpag) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
-                // 🔧 Añadimos codral# para que llegue el régimen traducido
+            // 🔁 CAMBIO: ahora inyectamos todos los <distri> construidos desde $rooms
+            $buildXmlZone = function (int $indpag) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac, $rooms) {
                 $traduc    = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>\n  <traduc>codral#</traduc>";
                 $numrstXml = $numrst ? "  <numrst>{$numrst}</numrst>\n" : "  <numrst>200</numrst>\n";
                 $codnacXml = $codnac ? "  <codnac>{$codnac}</codnac>\n" : "";
                 $codzge    = e($validated['codzge']);
+                $distriXml = $this->buildDistriXml($rooms);
+
                 return <<<XML
 <DisponibilidadHotelPeticion>
   <ideses>{$sessionId}</ideses>
@@ -258,10 +351,7 @@ class AvailabilityController extends Controller
   <fecini>{$fecini}</fecini>
   <fecfin>{$fecfin}</fecfin>
   <codzge>{$codzge}</codzge>
-  <distri id="1">
-    <numuni>1</numuni>
-    <numadl>{$validated['numadl']}</numadl>
-  </distri>
+{$distriXml}
 {$traduc}
 {$codnacXml}  <timout>{$timeoutMs}</timout>
 {$numrstXml}  <indpag>{$indpag}</indpag>
@@ -269,6 +359,7 @@ class AvailabilityController extends Controller
 </DisponibilidadHotelPeticion>
 XML;
             };
+
 
             $client = new \GuzzleHttp\Client([
                 'headers' => [
@@ -377,7 +468,6 @@ XML;
                 $expected = (int)($numrst ?: 200);
                 if ($returned < $expected) break;
                 $indpag++;
-                
             } while (true);
 
             $perf['http_ms'] = (int) round((microtime(true) - $t_http0) * 1000);
@@ -471,6 +561,8 @@ XML;
                         'manual_codes' => !empty($manualCodes),
                         'zone_total'   => $zoneTotalHotels,
                         'source'       => $source,
+                        // 🔴 NUEVO: pasar la ocupación normalizada a la vista/API
+                        'rooms'        => $rooms,
                     ],
                     'providers'           => [],
                     'hotelProviderMatrix' => [],
@@ -489,11 +581,14 @@ XML;
                 'curl' => [CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0],
             ]);
 
-            $buildXmlMulti = function (array $codsers) use ($sessionId, $cfg, $fecini, $fecfin, $validated, $timeoutMs, $numrst, $codnac) {
+            // 🔁 CAMBIO: inyectamos distri multihab también en modo por códigos
+            $buildXmlMulti = function (array $codsers) use ($sessionId, $cfg, $fecini, $fecfin, $timeoutMs, $numrst, $codnac, $rooms) {
                 $codserLines = implode("\n", array_map(fn($c) => "  <codser>{$c}</codser>", $codsers));
                 $traduc      = "  <traduc>codsmo#</traduc>\n  <traduc>codcha#</traduc>\n  <traduc>codral#</traduc>";
                 $numrstXml   = $numrst ? "  <numrst>{$numrst}</numrst>\n" : "";
                 $codnacXml   = $codnac ? "  <codnac>{$codnac}</codnac>\n" : "";
+                $distriXml   = $this->buildDistriXml($rooms);
+
                 return <<<XML
 <DisponibilidadHotelPeticion>
   <ideses>{$sessionId}</ideses>
@@ -501,10 +596,7 @@ XML;
   <fecini>{$fecini}</fecini>
   <fecfin>{$fecfin}</fecfin>
 {$codserLines}
-  <distri id="1">
-    <numuni>1</numuni>
-    <numadl>{$validated['numadl']}</numadl>
-  </distri>
+{$distriXml}
 {$traduc}
 {$codnacXml}  <timout>{$timeoutMs}</timout>
 {$numrstXml}  <indpag>0</indpag>
@@ -512,6 +604,8 @@ XML;
 </DisponibilidadHotelPeticion>
 XML;
             };
+
+
 
             $batchSizeCodser = 50;
             $chunks = array_chunk($codesPool, $batchSizeCodser, false);
@@ -868,6 +962,7 @@ XML;
             'providerHotelCountsPage'  => $providerHotelCountsPage,
             'httpMeta'                 => $httpMeta,
             'perf'                     => $perf,
+            'rooms'        => $rooms,
             'selectionNote'            => !empty($manualCodes)
                 ? "{$perPage} visibles — consultados en lotes de 100 (códigos manuales)"
                 : ($usingZoneMode
