@@ -43,6 +43,27 @@
                 placeholder="A-39018" />
               <p class="mt-1 text-xs text-slate-500">Si se rellena, se ignorarán los códigos manuales (salvo intersección).</p>
             </div>
+            {{-- ======================== BÚSQUEDA POR HOTEL ======================== --}}
+            <div class="md:col-span-2 relative">
+              <label for="hotel_name" class="block text-sm font-medium text-slate-700">
+                Hotel (buscar por nombre)
+              </label>
+
+              <input id="hotel_name" type="text"
+                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="Escribe el nombre del hotel (p. ej., Iberostar...)" autocomplete="off" />
+
+              {{-- Contenedor de sugerencias --}}
+              <div id="hotel_suggestions"
+                class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-72 overflow-auto">
+                {{-- opciones via JS --}}
+              </div>
+
+              <p class="mt-1 text-xs text-slate-500">
+                Al seleccionar un hotel se añadirá su <strong>codser</strong> al campo de “Códigos de hotel”.
+                Si <strong>Código de Zona</strong> está vacío, se rellenará automáticamente con la zona del hotel.
+              </p>
+            </div>
 
             {{-- ======================== CÓDIGOS MANUALES ======================== --}}
             <div class="md:col-span-2">
@@ -504,6 +525,215 @@
       });
     })();
   </script>
+  <script>
+    (function() {
+      // Elementos del DOM
+      const hotelNameInput = document.getElementById('hotel_name');
+      const hotelSuggestBox = document.getElementById('hotel_suggestions');
+      const codzgeInput = document.querySelector('input[data-codzge]');
+      const hotelCodesTA = document.getElementById('hotel_codes');
+      const hotelCountLabel = document.getElementById('hotel_count');
+
+      if (!hotelNameInput || !hotelSuggestBox || !hotelCodesTA) return;
+
+      // Endpoint del controller nuevo
+      const HOTEL_SEARCH_ENDPOINT = @json(route('search.hotels'));
+
+      // Estado local
+      let h_abortCtrl = null;
+      let h_debounce = null;
+      let h_lastItems = [];
+      let h_activeIndex = -1;
+
+      // === Helpers ===
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, s => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        } [s]));
+      }
+
+      function uniqueTokensFromText(str) {
+        if (!str) return [];
+        return Array.from(new Set(
+          String(str)
+          .replace(/[\n\r;]/g, ' ')
+          .split(/[,\s]+/g)
+          .map(s => s.trim())
+          .filter(Boolean)
+        ));
+      }
+
+      function updateHotelCounter() {
+        const n = uniqueTokensFromText(hotelCodesTA.value).length;
+        if (hotelCountLabel) hotelCountLabel.textContent = `${n} ${n === 1 ? 'hotel' : 'hoteles'}`;
+      }
+
+      function showHotelSuggestions(items) {
+        hotelSuggestBox.innerHTML = '';
+        if (!items || !items.length) {
+          hotelSuggestBox.classList.add('hidden');
+          return;
+        }
+
+        const frag = document.createDocumentFragment();
+        items.forEach((it, idx) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'w-full text-left px-3 py-2 hover:bg-slate-100 focus:bg-slate-100';
+
+          // Línea principal: Nombre del hotel
+          // Línea secundaria: codser y zona
+          const name = escapeHtml(it.name ?? '');
+          const cod = escapeHtml(it.codser ?? '');
+          const zname = escapeHtml(it.zone_name ?? '');
+
+          btn.dataset.index = idx;
+          btn.innerHTML = `
+  <div class="text-sm font-medium">${name}</div>
+  <div class="text-xs text-slate-500">codser: <strong>${cod}</strong> · zona: <strong>${zname || '—'}</strong></div>
+`;
+          btn.addEventListener('click', () => selectHotelIndex(idx));
+          frag.appendChild(btn);
+        });
+
+        hotelSuggestBox.appendChild(frag);
+        hotelSuggestBox.classList.remove('hidden');
+        h_activeIndex = -1;
+        highlightHotelActive();
+      }
+
+      function highlightHotelActive() {
+        const children = Array.from(hotelSuggestBox.children);
+        children.forEach((el, i) => {
+          el.classList.toggle('bg-slate-100', i === h_activeIndex);
+        });
+      }
+
+      async function selectHotelIndex(idx) {
+        const item = h_lastItems[idx];
+        if (!item) return;
+
+        // 1) Pinta el nombre en el input (estético)
+        hotelNameInput.value = item.name || '';
+
+        // 2) Añade/mezcla el codser al textarea, evitando duplicados
+        const existing = uniqueTokensFromText(hotelCodesTA.value);
+        if (item.codser) {
+          if (!existing.includes(String(item.codser))) {
+            existing.push(String(item.codser));
+          }
+        }
+
+        // Reescribe formateando (20 por línea como ya haces con zonas)
+        const chunkSize = 20;
+        const lines = [];
+        for (let i = 0; i < existing.length; i += chunkSize) {
+          lines.push(existing.slice(i, i + chunkSize).join(', '));
+        }
+        hotelCodesTA.value = lines.join('\n');
+        updateHotelCounter();
+
+        // 3) Si el código de zona está VACÍO, lo rellenamos con la del hotel seleccionado
+        if (codzgeInput && (!codzgeInput.value || !codzgeInput.value.trim())) {
+          if (item.zone_code) {
+            codzgeInput.value = item.zone_code;
+          }
+        }
+        // Si ya hay zona y es distinta, no la tocamos (evitamos romper intersección).
+        // Si quieres avisar, puedes mostrar un pequeño aviso aquí:
+        // else if (codzgeInput.value && item.zone_code && codzgeInput.value !== item.zone_code) { /* opcional: toast */ }
+
+        // 4) Oculta sugerencias
+        hotelSuggestBox.classList.add('hidden');
+      }
+
+      async function queryHotels(q) {
+        if (h_abortCtrl) h_abortCtrl.abort();
+        h_abortCtrl = new AbortController();
+
+        try {
+          const url = new URL(HOTEL_SEARCH_ENDPOINT, window.location.origin);
+          url.searchParams.set('q', q);
+          url.searchParams.set('limit', '10');
+
+          // Si hay zona ya escrita, la mandamos como filtro opcional (sin obligar)
+          if (codzgeInput && codzgeInput.value && /^A-\d+$/i.test(codzgeInput.value.trim())) {
+            url.searchParams.set('zoneCode', codzgeInput.value.trim());
+          }
+
+          const res = await fetch(url.toString(), {
+            signal: h_abortCtrl.signal
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          h_lastItems = data.items || [];
+          showHotelSuggestions(h_lastItems);
+        } catch (e) {
+          if (e.name !== 'AbortError') {
+            console.error(e);
+            h_lastItems = [];
+            showHotelSuggestions([]);
+          }
+        }
+      }
+
+      // === Eventos ===
+      hotelNameInput.addEventListener('input', () => {
+        const q = hotelNameInput.value.trim();
+        if (h_debounce) clearTimeout(h_debounce);
+
+        if (q.length < 2) {
+          hotelSuggestBox.classList.add('hidden');
+          h_lastItems = [];
+          return;
+        }
+
+        h_debounce = setTimeout(() => queryHotels(q), 180);
+      });
+
+      hotelNameInput.addEventListener('focus', () => {
+        if (h_lastItems.length) hotelSuggestBox.classList.remove('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!hotelSuggestBox.contains(e.target) && e.target !== hotelNameInput) {
+          hotelSuggestBox.classList.add('hidden');
+        }
+      });
+
+      // Teclado
+      hotelNameInput.addEventListener('keydown', (e) => {
+        const hasList = !hotelSuggestBox.classList.contains('hidden') && h_lastItems.length > 0;
+        if (!hasList) return;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          h_activeIndex = (h_activeIndex + 1) % h_lastItems.length;
+          highlightHotelActive();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          h_activeIndex = (h_activeIndex - 1 + h_lastItems.length) % h_lastItems.length;
+          highlightHotelActive();
+        } else if (e.key === 'Enter' && h_activeIndex >= 0) {
+          e.preventDefault();
+          selectHotelIndex(h_activeIndex);
+        } else if (e.key === 'Escape') {
+          hotelSuggestBox.classList.add('hidden');
+        }
+      });
+
+      // Contador dinámico por si el usuario edita a mano
+      hotelCodesTA.addEventListener('input', updateHotelCounter);
+
+      // Estado inicial
+      updateHotelCounter();
+    })();
+  </script>
+
 
 
 </x-app-layout>

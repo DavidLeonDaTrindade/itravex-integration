@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\Hotel;
 use App\Models\Zone;
+use App\Http\Controllers\HotelSearchController;
 
 Route::get('/', fn() => view('welcome'))->name('home');
 
@@ -113,6 +114,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/areas/{code}/hotels', [AreaSearchController::class, 'hotels'])
         ->middleware('throttle:30,1')
         ->where('code', 'A-\d+');
+
+    Route::get('/search/hotels', [HotelSearchController::class, 'search'])
+    ->name('search.hotels');
+
 });
 
 require __DIR__ . '/auth.php';
