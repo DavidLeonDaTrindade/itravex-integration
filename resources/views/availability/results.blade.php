@@ -716,15 +716,29 @@
                                 Habitaciones
                             </h3>
                             @php
-                            // Ordena por precio de menor a mayor (maneja nulos/no numéricos)
-                            $roomsSorted = collect($hotel['rooms'] ?? [])
+                            // 1) Todas las habitaciones
+                            $roomsAll = collect($hotel['rooms'] ?? []);
+
+                            // 2) Orden global por precio ascendente (nulos al final)
+                            $roomsSorted = $roomsAll
                             ->sortBy(function ($r) {
                             $p = $r['price_per_night'] ?? null;
-                            // convierte a float; si no es numérico, lo manda al final
                             return is_numeric($p) ? (float) $p : INF;
                             })
                             ->values();
+
+                            // 3) Agrupar por proveedor (normalizado en mayúsculas; '—' si no hay codtou)
+                            $roomsByProvider = $roomsSorted->groupBy(function ($r) {
+                            return strtoupper((string)($r['codtou'] ?? '—'));
+                            });
+
+                            // 4) Orden de los proveedores por su tarifa mínima (si empatan, alfabético por clave)
+                            $roomsByProvider = $roomsByProvider->sortBy(function ($group, $prov) {
+                            $min = $group->pluck('price_per_night')->filter(fn($x) => is_numeric($x))->min();
+                            return is_numeric($min) ? (float)$min : INF;
+                            })->sortKeys();
                             @endphp
+
                             <span class="inline-flex items-center gap-2 text-sm text-indigo-600">
                                 {{ count($roomsSorted) }} disponibles
                                 <svg class="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -734,125 +748,142 @@
                         </summary>
 
                         <ul class="space-y-2 mt-3">
-                            @foreach ($roomsSorted as $room)
+                            @foreach ($roomsByProvider as $prov => $group)
                             @php
-                            $codtou = strtoupper((string)($room['codtou'] ?? ''));
-                            $isInternalRoom = $codtou !== '' && in_array($codtou, $internalCodtous, true);
-
-                            // helpers
-                            $afterHash = function ($v) {
-                            if (!is_string($v) || $v === '') return '';
-                            $pos = strpos($v, '#');
-                            return $pos === false ? trim($v) : trim(substr($v, $pos + 1));
-                            };
-                            $removeSuffix = function ($text, $suffix) {
-                            $len = strlen($suffix);
-                            if ($len > 0 && substr($text, -$len) === $suffix) return substr($text, 0, -$len);
-                            return $text;
-                            };
-
-                            // fuentes
-                            $rawSmo = $room['codsmo'] ?? ($room['room_type'] ?? '');
-                            $rawCha = $room['codcha'] ?? ($room['room_code'] ?? '');
-                            $rawRal = $room['codral'] ?? ($room['board'] ?? '');
-                            $infrcl = $room['infrcl'] ?? ($room['infrcl_text'] ?? '');
-
-                            // labels limpios
-                            $smoLabel = $afterHash($rawSmo);
-                            $chaLabel = $afterHash($rawCha);
-                            $ralLabel = $afterHash($rawRal);
-
-                            if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
-                            $parts = explode('!~', $infrcl);
-                            $last = trim(end($parts));
-                            $first = strtok($last, '_');
-                            if ($first !== false) {
-                            $first = $removeSuffix($first, 'Room');
-                            $chaLabel = trim($first);
-                            }
-                            }
-
-                            $roomParts = [];
-                            if ($smoLabel !== '') $roomParts[] = $smoLabel;
-                            if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
-
-                            $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
-                            $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+                            $provUpper = strtoupper($prov);
+                            $isIntProv = in_array($provUpper, $internalCodtous, true);
                             @endphp
 
-                            <li class="room-item {{ $isInternalRoom ? 'is-internal' : '' }}">
-                                @if($isInternalRoom)
-                                <span class="flag-internal">INTERNA</span>
-                                @endif
-
-                                <div class="room-left">
-                                    <p class="room-title">
-                                        <span class="font-semibold text-slate-700">Tipo -</span>
-                                        {{ $roomDesc }}
+                            <div class="mt-4">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <p class="text-sm font-semibold text-slate-700">
+                                        🏷️ Proveedor: <span class="text-slate-900">{{ $prov }}</span>
+                                        <span class="text-slate-500">({{ $group->count() }} tarifas)</span>
                                     </p>
-                                    <p class="room-title">
-                                        <span class="font-semibold text-slate-700">Régimen -</span>
-                                        {{ $boardDesc }}
-                                    </p>
-
-                                    <p class="room-meta">
-                                        💶 {{ number_format((float)($room['price_per_night'] ?? 0), 2) }} {{ $hotel['currency'] }}
-                                        @if (!empty($room['availability']))
-                                        <span class="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                                            {{ $room['availability'] }} disp.
-                                        </span>
-                                        @endif
-                                    </p>
-
-                                    @if(!empty($room['codtou']))
-                                    <p class="mt-1 text-xs text-slate-600">
-                                        🏷️ Proveedor:
-                                        <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
-                                        @if($isInternalRoom)
-                                        <span class="badge badge-internal ml-2">Interna</span>
-                                        @endif
-                                    </p>
+                                    @if($isIntProv)
+                                    <span class="badge badge-internal">Interna</span>
                                     @endif
                                 </div>
 
-                                {{-- === INSERTA AQUÍ EL FORMULARIO DE "Seleccionar" === --}}
-                                <div class="room-right">
-                                    {{-- Dentro del bucle de habitaciones, justo donde pintas cada $room --}}
-                                    <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
-                                        {{-- payload mínimo para el paso de bloqueo --}}
-                                        <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
-                                        <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
-                                        <input type="hidden" name="currency" value="{{ $hotel['currency'] }}">
-                                        <input type="hidden" name="start_date" value="{{ request('fecini') }}">
-                                        <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+                                <ul class="space-y-2">
+                                    @foreach ($group as $room)
+                                    @php
+                                    $codtou = strtoupper((string)($room['codtou'] ?? ''));
+                                    $isInternalRoom = $codtou !== '' && in_array($codtou, $internalCodtous, true);
 
-                                        {{-- datos de la habitación seleccionada --}}
-                                        <input type="hidden" name="room_type" value="{{ $roomDesc }}">
-                                        <input type="hidden" name="board" value="{{ $boardDesc }}">
-                                        <input type="hidden" name="price_per_night" value="{{ $room['price_per_night'] }}">
-                                        <input type="hidden" name="provider" value="{{ $room['codtou'] ?? '' }}">
-                                        <input type="hidden" name="room_internal_id" value="{{ $room['room_internal_id'] ?? '' }}">
+                                    // helpers (tus mismas funciones inline)
+                                    $afterHash = function ($v) {
+                                    if (!is_string($v) || $v === '') return '';
+                                    $pos = strpos($v, '#');
+                                    return $pos === false ? trim($v) : trim(substr($v, $pos + 1));
+                                    };
+                                    $removeSuffix = function ($text, $suffix) {
+                                    $len = strlen($suffix);
+                                    if ($len > 0 && substr($text, -$len) === $suffix) return substr($text, 0, -$len);
+                                    return $text;
+                                    };
 
-                                        {{-- (opcional) ocupación multihabitación original --}}
-                                        @if (request()->has('rooms'))
-                                        @foreach ((array) request('rooms') as $ri => $r)
-                                        <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($r['adl'] ?? 1) }}">
-                                        <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($r['chd'] ?? 0) }}">
-                                        @foreach ((array)($r['ages'] ?? []) as $ai => $age)
-                                        <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
-                                        @endforeach
-                                        @endforeach
+                                    // fuentes
+                                    $rawSmo = $room['codsmo'] ?? ($room['room_type'] ?? '');
+                                    $rawCha = $room['codcha'] ?? ($room['room_code'] ?? '');
+                                    $rawRal = $room['codral'] ?? ($room['board'] ?? '');
+                                    $infrcl = $room['infrcl'] ?? ($room['infrcl_text'] ?? '');
+
+                                    // labels limpios
+                                    $smoLabel = $afterHash($rawSmo);
+                                    $chaLabel = $afterHash($rawCha);
+                                    $ralLabel = $afterHash($rawRal);
+
+                                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                                    $parts = explode('!~', $infrcl);
+                                    $last = trim(end($parts));
+                                    $first = strtok($last, '_');
+                                    if ($first !== false) {
+                                    $first = $removeSuffix($first, 'Room');
+                                    $chaLabel = trim($first);
+                                    }
+                                    }
+
+                                    $roomParts = [];
+                                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+
+                                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+                                    @endphp
+
+                                    <li class="room-item {{ $isInternalRoom ? 'is-internal' : '' }}">
+                                        @if($isInternalRoom)
+                                        <span class="flag-internal">INTERNA</span>
                                         @endif
 
-                                        <button type="submit" class="btn-sel select-btn">
-                                            <span class="spinner" aria-hidden="true"></span>
-                                            <span class="label">Seleccionar</span>
-                                        </button>
-                                    </form>
-                                </div>
-                                {{-- === FIN DEL FORM === --}}
-                            </li>
+                                        <div class="room-left">
+                                            <p class="room-title">
+                                                <span class="font-semibold text-slate-700">Tipo -</span>
+                                                {{ $roomDesc }}
+                                            </p>
+                                            <p class="room-title">
+                                                <span class="font-semibold text-slate-700">Régimen -</span>
+                                                {{ $boardDesc }}
+                                            </p>
+
+                                            <p class="room-meta">
+                                                💶 {{ number_format((float)($room['price_per_night'] ?? 0), 2) }} {{ $hotel['currency'] }}
+                                                @if (!empty($room['availability']))
+                                                <span class="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                                                    {{ $room['availability'] }} disp.
+                                                </span>
+                                                @endif
+                                            </p>
+
+                                            {{-- Si prefieres evitar repetir el proveedor dentro del bloque, puedes eliminar este párrafo --}}
+                                            @if(!empty($room['codtou']))
+                                            <p class="mt-1 text-xs text-slate-600">
+                                                🏷️ Proveedor:
+                                                <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
+                                                @if($isInternalRoom)
+                                                <span class="badge badge-internal ml-2">Interna</span>
+                                                @endif
+                                            </p>
+                                            @endif
+                                        </div>
+
+                                        <div class="room-right">
+                                            <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
+                                                <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
+                                                <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
+                                                <input type="hidden" name="currency" value="{{ $hotel['currency'] }}">
+                                                <input type="hidden" name="start_date" value="{{ request('fecini') }}">
+                                                <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+
+                                                <input type="hidden" name="room_type" value="{{ $roomDesc }}">
+                                                <input type="hidden" name="board" value="{{ $boardDesc }}">
+                                                <input type="hidden" name="price_per_night" value="{{ $room['price_per_night'] }}">
+                                                <input type="hidden" name="provider" value="{{ $room['codtou'] ?? '' }}">
+                                                <input type="hidden" name="room_internal_id" value="{{ $room['room_internal_id'] ?? '' }}">
+
+                                                @if (request()->has('rooms'))
+                                                @foreach ((array) request('rooms') as $ri => $r)
+                                                <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($r['adl'] ?? 1) }}">
+                                                <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($r['chd'] ?? 0) }}">
+                                                @foreach ((array)($r['ages'] ?? []) as $ai => $age)
+                                                <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
+                                                @endforeach
+                                                @endforeach
+                                                @endif
+
+                                                <button type="submit" class="btn-sel select-btn">
+                                                    <span class="spinner" aria-hidden="true"></span>
+                                                    <span class="label">Seleccionar</span>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </li>
+                                    @endforeach
+                                </ul>
+                            </div>
                             @endforeach
+
                         </ul>
                     </details>
                 </div>
@@ -861,9 +892,48 @@
 
 
                 <div class="mt-auto">
+                    @php
+                    // Moneda del hotel (fallback EUR)
+                    $currency = $hotel['currency'] ?? 'EUR';
+
+                    // Colección de rooms
+                    $roomsAll = collect($hotel['rooms'] ?? []);
+
+                    // Normalizador robusto a float (acepta "1,004.34", "1004.34", etc.)
+                    $toFloat = function ($v) {
+                    if (is_null($v)) return null;
+                    if (is_numeric($v)) return (float) $v;
+                    if (is_string($v)) {
+                    // elimina cualquier carácter no dígito o punto/coma, convierte coma decimal a punto
+                    $v = preg_replace('/[^0-9,.\-]/', '', $v); // deja dígitos, . , y -
+                    // si hay coma y punto, asumimos coma como separador de miles => quita comas
+                    if (strpos($v, ',') !== false && strpos($v, '.') !== false) {
+                    $v = str_replace(',', '', $v); // "1,004.34" -> "1004.34"
+                    } else {
+                    // si solo hay comas, asúmelas como decimales: "1004,34" -> "1004.34"
+                    $v = str_replace(',', '.', $v);
+                    }
+                    return is_numeric($v) ? (float) $v : null;
+                    }
+                    return null;
+                    };
+
+                    // Mínimo real entre todas las rooms
+                    $minPrice = $roomsAll
+                    ->pluck('price_per_night')
+                    ->map($toFloat)
+                    ->filter(fn ($x) => $x !== null)
+                    ->min();
+                    @endphp
+
                     <p class="text-right text-lg font-bold text-green-600">
-                        Desde {{ number_format($hotel['price'], 2) }} {{ $hotel['currency'] }}
+                        @if ($minPrice !== null)
+                        Desde {{ number_format($minPrice, 2) }} {{ $currency }}
+                        @else
+                        Desde —
+                        @endif
                     </p>
+
                 </div>
             </div>
             @empty
