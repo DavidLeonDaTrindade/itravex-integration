@@ -10,7 +10,15 @@
       <div class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="p-6 md:p-8">
 
-          <form method="POST" action="{{ route('availability.search') }}" autocomplete="off" class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <form
+            method="POST"
+            action="{{ route('availability.search') }}"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            class="grid grid-cols-1 gap-6 md:grid-cols-2"
+            id="availability-form"
+          >
             @csrf
 
             {{-- ======================== BÚSQUEDA POR ZONA ======================== --}}
@@ -22,7 +30,7 @@
               <input id="area_name" type="text"
                 class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 placeholder="Escribe el nombre del área (p. ej., Tenerife)"
-                autocomplete="off" />
+                autocomplete="off" autocapitalize="off" spellcheck="false" />
 
               {{-- Contenedor de sugerencias --}}
               <div id="area_suggestions"
@@ -40,9 +48,10 @@
               <input id="codzge" type="text" name="codzge" value="{{ old('codzge') }}"
                 data-codzge
                 class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="A-39018" />
+                placeholder="A-39018" autocomplete="off" autocapitalize="off" spellcheck="false" />
               <p class="mt-1 text-xs text-slate-500">Si se rellena, se ignorarán los códigos manuales (salvo intersección).</p>
             </div>
+
             {{-- ======================== BÚSQUEDA POR HOTEL ======================== --}}
             <div class="md:col-span-2 relative">
               <label for="hotel_name" class="block text-sm font-medium text-slate-700">
@@ -51,7 +60,7 @@
 
               <input id="hotel_name" type="text"
                 class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Escribe el nombre del hotel (p. ej., Iberostar...)" autocomplete="off" />
+                placeholder="Escribe el nombre del hotel (p. ej., Iberostar...)" autocomplete="off" autocapitalize="off" spellcheck="false" />
 
               {{-- Contenedor de sugerencias --}}
               <div id="hotel_suggestions"
@@ -75,7 +84,7 @@
               </div>
               <textarea id="hotel_codes" name="hotel_codes" rows="3"
                 class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="105971, 12345&#10;67890">{{ old('hotel_codes') }}</textarea>
+                placeholder="105971, 12345&#10;67890" autocomplete="off" autocapitalize="off" spellcheck="false">{{ old('hotel_codes') }}</textarea>
               <p class="mt-1 text-xs text-slate-500">Separados por coma, espacios o saltos de línea.</p>
             </div>
 
@@ -83,13 +92,15 @@
             <div>
               <label for="fecini" class="block text-sm font-medium text-slate-700">Fecha Inicio</label>
               <input id="fecini" type="date" name="fecini" value="{{ old('fecini') }}" required
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                autocomplete="off" />
             </div>
 
             <div>
               <label for="fecfin" class="block text-sm font-medium text-slate-700">Fecha Fin</label>
               <input id="fecfin" type="date" name="fecfin" value="{{ old('fecfin') }}" required
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                autocomplete="off" />
             </div>
 
             <!-- ===== Habitaciones (multihabitación con edades de niños) ===== -->
@@ -136,11 +147,11 @@
               <div id="rooms-container" class="mt-2"></div>
             </div>
 
-
             <div>
               <label for="codnac" class="block text-sm font-medium text-slate-700">Código de país (ISO 3166-1)</label>
               <input id="codnac" type="text" name="codnac" value="{{ old('codnac') }}" placeholder="ESP" maxlength="3"
-                class="mt-1 block w-32 rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase" />
+                class="mt-1 block w-32 rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
+                autocomplete="off" autocapitalize="off" spellcheck="false" />
               <p class="mt-1 text-xs text-slate-500">ISO 3166-1 (p. ej. <strong>ESP</strong>, <strong>FRA</strong>, <strong>USA</strong>).</p>
             </div>
 
@@ -149,7 +160,8 @@
               <div>
                 <label for="timeout" class="block text-sm font-medium text-slate-700">Timeout (ms)</label>
                 <input id="timeout" type="number" name="timeout" min="1000" max="60000" value="{{ old('timeout') }}" placeholder="8000"
-                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  autocomplete="off" />
               </div>
 
               <div>
@@ -157,10 +169,10 @@
                   Resultados por página del proveedor (numrst)
                 </label>
                 <input id="numrst" type="number" name="numrst" min="1" max="500" value="{{ old('numrst', 20) }}" placeholder="20"
-                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  autocomplete="off" />
                 <p class="mt-1 text-xs text-slate-500">Se aplica en <strong>source=provider</strong> (paginación nativa indpag/numrst)</p>
               </div>
-
 
               <div class="md:col-span-2 rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div class="flex items-center justify-between p-4 md:p-5">
@@ -175,44 +187,68 @@
                 </div>
 
                 <div id="cred-panel" class="hidden border-t border-slate-200 p-4 md:p-6">
+
+                  {{-- HONEYPOT (absorbe autocompletado del navegador) --}}
+                  <div class="sr-only" aria-hidden="true" style="position:absolute; left:-9999px; top:-9999px; width:1px; height:1px; overflow:hidden;">
+                    <input type="text" name="email" autocomplete="username">
+                    <input type="password" name="password" autocomplete="current-password">
+                  </div>
+
                   <div class="mt-2 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {{-- VISIBLES (UI) - sin name "real" --}}
                     <div>
-                      <label for="endpoint" class="block text-sm font-medium text-slate-700">Endpoint</label>
-                      <input id="endpoint" type="url" name="endpoint" value="{{ old('endpoint') }}" placeholder="https://api.proveedor.com/endpoint"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                      <label for="endpoint_ui" class="block text-sm font-medium text-slate-700">Endpoint</label>
+                      <input id="endpoint_ui" type="url" value="{{ old('endpoint') }}" placeholder="https://api.proveedor.com/endpoint"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        autocomplete="off" autocapitalize="off" spellcheck="false">
                     </div>
+
                     <div>
-                      <label for="codsys" class="block text-sm font-medium text-slate-700">codsys</label>
-                      <input id="codsys" type="text" name="codsys" value="{{ old('codsys') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                      <label for="codsys_ui" class="block text-sm font-medium text-slate-700">codsys</label>
+                      <input id="codsys_ui" type="text" value="{{ old('codsys') }}"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        autocomplete="off" autocapitalize="off" spellcheck="false">
                     </div>
+
                     <div>
-                      <label for="codage" class="block text-sm font-medium text-slate-700">codage</label>
-                      <input id="codage" type="text" name="codage" value="{{ old('codage') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                      <label for="codage_ui" class="block text-sm font-medium text-slate-700">codage</label>
+                      <input id="codage_ui" type="text" value="{{ old('codage') }}"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        autocomplete="off" autocapitalize="off" spellcheck="false">
                     </div>
+
                     <div>
-                      <label for="user" class="block text-sm font-medium text-slate-700">user</label>
-                      <input id="user" type="text" name="user" autocomplete="off" value="{{ old('user') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                      <label for="user_ui" class="block text-sm font-medium text-slate-700">user</label>
+                      <input id="user_ui" type="text" value="{{ old('user') }}"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        autocomplete="off" autocapitalize="off" spellcheck="false">
                     </div>
+
                     <div>
-                      <label for="pass" class="block text-sm font-medium text-slate-700">pass</label>
-                      <input id="pass" type="password" name="pass" autocomplete="off" placeholder="••••••••"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                      <label for="pass_ui" class="block text-sm font-medium text-slate-700">pass</label>
+                      <input id="pass_ui" type="password" placeholder="••••••••"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        autocomplete="new-password" autocapitalize="off" spellcheck="false">
                     </div>
+
                     <div>
-                      <label for="codtou" class="block text-sm font-medium text-slate-700">codtou</label>
-                      <input id="codtou" type="text" name="codtou" value="{{ old('codtou','LIB') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                      <label for="codtou_ui" class="block text-sm font-medium text-slate-700">codtou</label>
+                      <input id="codtou_ui" type="text" value="{{ old('codtou','LIB') }}"
+                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        autocomplete="off" autocapitalize="off" spellcheck="false">
                     </div>
+
+                    {{-- REALES (ocultos) que viajan en el POST --}}
+                    <input type="hidden" name="endpoint" id="endpoint_real" value="">
+                    <input type="hidden" name="codsys" id="codsys_real" value="">
+                    <input type="hidden" name="codage" id="codage_real" value="">
+                    <input type="hidden" name="user" id="user_real" value="">
+                    <input type="hidden" name="pass" id="pass_real" value="">
+                    <input type="hidden" name="codtou" id="codtou_real" value="">
                   </div>
                 </div>
               </div>
-
             </div>
-
-
 
             <div class="md:col-span-2">
               <button type="submit"
@@ -227,6 +263,7 @@
     </div>
   </div>
 
+  {{-- =========================== SCRIPTS =========================== --}}
   <script>
     (function() {
       const inputName = document.getElementById('area_name');
@@ -235,7 +272,6 @@
       const textAreaHotels = document.getElementById('hotel_codes');
       const countEl = document.getElementById('hotel_count');
 
-      // Endpoints (ajusta si tu ruta difiere)
       const ENDPOINT = @json(url('areas')); // /areas?q=...
       const HOTELS_ENDPOINT_BASE = @json(url('areas')); // /areas/{code}/hotels
 
@@ -291,11 +327,29 @@
         const panel = document.getElementById('cred-panel');
         if (!btn || !panel) return;
         btn.addEventListener('click', () => {
-          const open = panel.classList.toggle('hidden') === false;
-          btn.textContent = open ? 'Ocultar' : 'Mostrar';
-          btn.setAttribute('aria-expanded', String(open));
+          const opened = panel.classList.toggle('hidden') === false;
+          btn.textContent = opened ? 'Ocultar' : 'Mostrar';
+          btn.setAttribute('aria-expanded', String(opened));
+
+          // Anti-autofill: al abrir, vaciamos inmediatamente cualquier relleno forzado del navegador
+          if (opened) {
+            setTimeout(() => {
+              ['endpoint_ui','codsys_ui','codage_ui','user_ui','pass_ui','codtou_ui'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.matches(':-webkit-autofill')) el.value = '';
+              });
+            }, 0);
+          }
         });
 
+        // Anti-autofill adicional: readonly breve al cargar
+        ['endpoint_ui','codsys_ui','codage_ui','user_ui','pass_ui','codtou_ui'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.readOnly = true;
+            setTimeout(() => { el.readOnly = false; }, 400);
+          }
+        });
       })();
 
       function highlightActive() {
@@ -321,7 +375,7 @@
           '>': '&gt;',
           '"': '&quot;',
           "'": '&#39;'
-        } [s]));
+        }[s]));
       }
 
       async function queryServer(q) {
@@ -331,9 +385,7 @@
           const url = new URL(ENDPOINT, window.location.origin);
           url.searchParams.set('q', q);
           url.searchParams.set('limit', '10');
-          const res = await fetch(url.toString(), {
-            signal: abortCtrl.signal
-          });
+          const res = await fetch(url.toString(), { signal: abortCtrl.signal });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const data = await res.json();
           lastItems = data.items || [];
@@ -355,8 +407,6 @@
           const data = await res.json();
 
           const codes = (data.items || []).map(it => it.codser).filter(Boolean);
-
-          // Agrupar 20 por línea para lectura; puedes cambiar a join('\n') si prefieres 1/linea
           const chunkSize = 20;
           const lines = [];
           for (let i = 0; i < codes.length; i += chunkSize) {
@@ -427,6 +477,7 @@
       updateCounter();
     })();
   </script>
+
   <script>
     (function() {
       const container = document.getElementById('rooms-container');
@@ -451,17 +502,9 @@
         const a = parseInt(adl.value || '0', 10);
         const c = parseInt(chd.value || '0', 10);
 
-        // Regla: >=1 adulto y máx. 4 personas/hab
-        if (a < 1) {
-          adl.setCustomValidity('Debe haber al menos 1 adulto');
-        } else {
-          adl.setCustomValidity('');
-        }
-        if (a + c > 4) {
-          chd.setCustomValidity('Máximo 4 personas por habitación');
-        } else {
-          chd.setCustomValidity('');
-        }
+        if (a < 1) { adl.setCustomValidity('Debe haber al menos 1 adulto'); } else { adl.setCustomValidity(''); }
+        if (a + c > 4) { chd.setCustomValidity('Máximo 4 personas por habitación'); } else { chd.setCustomValidity(''); }
+
 
         // Generar inputs de edades = nº de niños
         const current = agesWrap.querySelectorAll('input[type="number"]').length;
@@ -733,6 +776,13 @@
       updateHotelCounter();
     })();
   </script>
+  <style>
+input:-webkit-autofill {
+  outline: 2px solid orange !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+</style>
+
 
 
 
