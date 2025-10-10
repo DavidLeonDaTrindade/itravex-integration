@@ -429,8 +429,16 @@ XML;
                     foreach ($hotel->infhab as $room) {
                         $codtou     = strtoupper((string) $room->codtou);
                         $isInternal = in_array($codtou, $internalCodtous, true);
+                        $refdisAttr = isset($room['refdis']) ? (int)$room['refdis'] : null;
+                        $infrclVal  = (string) ($room->infrcl ?? '');
 
                         $providerRateCounts[$codtou] = ($providerRateCounts[$codtou] ?? 0) + 1;
+
+                        // Si no viene refdis como atributo, intenta sacarlo del infrcl "1!~..." / "2!~..."
+                        if ($refdisAttr === null && $infrclVal !== '') {
+                            $head = strtok($infrclVal, '!~');
+                            if (is_numeric($head)) $refdisAttr = (int)$head;
+                        }
 
                         if ($codtou !== '') {
                             if (!isset($providerHotelSets[$codtou])) $providerHotelSets[$codtou] = [];
@@ -456,6 +464,9 @@ XML;
                             'room_internal_id' => (string) $room['id'],
                             'is_internal'      => $isInternal,
                             'codtou'           => $codtou,
+                            'refdis'          => $refdisAttr,
+                            'infrcl'          => $infrclVal,
+
                         ];
                         $totalRooms++;
                     }
@@ -680,10 +691,9 @@ XML;
                         $rooms = [];
                         foreach ($hotel->infhab as $room) {
                             $codtou     = strtoupper((string) $room->codtou);
-                            $isInternal = ($codtou === 'LIB'); // SOLO LIB es interna
+                            $isInternal = ($codtou === 'LIB');
 
                             $providerRateCounts[$codtou] = ($providerRateCounts[$codtou] ?? 0) + 1;
-
                             if ($codtou !== '') {
                                 if (!isset($providerHotelSets[$codtou])) $providerHotelSets[$codtou] = [];
                                 $providerHotelSets[$codtou][$codser] = true;
@@ -703,15 +713,27 @@ XML;
                             $price = (float) $room->impnoc;
                             if ($price == 0 && isset($room->impcom)) $price = (float) $room->impcom;
 
+                            // 🔴 Añadido: leer infrcl y refdis (atributo o inferido)
+                            $refdisAttr = isset($room['refdis']) ? (int) $room['refdis'] : null;
+                            $infrclVal  = (string) ($room->infrcl ?? '');
+                            if ($refdisAttr === null && $infrclVal !== '') {
+                                $head = strtok($infrclVal, '!~');
+                                if (is_numeric($head)) $refdisAttr = (int) $head;
+                            }
+
                             $rooms[] = [
                                 'room_type'        => (string) $room->codsmo,
                                 'room_code'        => (string) $room->codcha,
                                 'board'            => (string) $room->codral,
                                 'price_per_night'  => $price,
-                                'availability'     => (string) $room->cupinv,
+                                'availability'     => (string) ($room->cupest ?? ''),
                                 'room_internal_id' => (string) $room['id'],
                                 'is_internal'      => $isInternal,
                                 'codtou'           => $codtou,
+
+                                // ✅ Claves que el Blade usa para packs 2x
+                                'refdis'           => $refdisAttr,
+                                'infrcl'           => $infrclVal,
                             ];
                             $totalRooms++;
                         }
@@ -720,6 +742,7 @@ XML;
                         $allHotels[] = $hotelInfo;
                     }
                 },
+
                 'rejected' => function ($reason, $batchKey) {
                     \Log::warning('itravex_batch_failed', ['batch' => $batchKey, 'reason' => (string)$reason]);
                 },

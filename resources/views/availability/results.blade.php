@@ -229,6 +229,40 @@
             letter-spacing: .02em;
         }
     </style>
+    <style>
+        /* === Packs de habitaciones: mejoras de legibilidad === */
+        .room-pack .desc,
+        .room-pack .desc * {
+            white-space: normal;
+            /* sin saltos raros */
+            word-break: normal;
+            /* NO cortar palabra a palabra */
+            overflow-wrap: anywhere;
+            /* permitir cortar sólo si es necesario */
+        }
+
+        .room-pack .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .75rem;
+            background: #f1f5f9;
+            /* slate-100 */
+            padding: .125rem .375rem;
+            border-radius: .375rem;
+            /* rounded-md */
+        }
+
+        .room-pack .rooms-grid .room-chip {
+            border: 1px solid #e2e8f0;
+            /* slate-200 */
+            background: #f8fafc;
+            /* slate-50 */
+            border-radius: .5rem;
+            /* rounded-lg */
+            padding: .75rem;
+            /* p-3 */
+        }
+    </style>
+
 
 
 
@@ -672,256 +706,449 @@
 
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-            @forelse ($hotels as $hotel)
-            <div class="bg-white rounded-2xl border border-gray-200 shadow hover:shadow-lg transition p-6 flex flex-col justify-between">
-                <div class="mb-4">
-                    <h2 class="text-xl font-bold text-blue-800 mb-1">{{ $hotel['name'] }}</h2>
-                    <p class="text-sm text-gray-500 mb-1">⭐ Categoría: {{ $hotel['category'] }}</p>
-                    <p class="text-sm text-gray-500">🏷 Código: {{ $hotel['code'] }} | 📍 Zona: {{ $hotel['zone'] }}</p>
-                </div>
-                {{-- 📦 Tarifas por proveedor (por hotel) --}}
-                @php
-                // Si el controller no lo preparó, lo calculamos aquí por hotel:
-                $provCounts = collect($hotel['rooms'] ?? [])
-                ->map(fn($r) => $r['codtou'] ?? '')
-                ->filter()
-                ->countBy()
-                ->sortDesc()
-                ->toArray();
-                @endphp
+    @forelse ($hotels as $hotel)
 
-                @if(!empty($provCounts))
+        {{-- 1) Calcular N y el "Desde" ANTES de renderizar nada --}}
+        @php
+            // ¿Cuántas habitaciones pidió el usuario?
+            $roomsReq = request()->has('rooms') ? (array) request('rooms') : [];
+            $roomsEffLocal = is_array($roomsEff ?? null) ? $roomsEff : $roomsReq;
+            $requestedRoomsCount = max(0, (int) collect($roomsEffLocal)->count());
+            $N = max(1, min(4, $requestedRoomsCount));
+
+            // Datos base
+            $currency = $hotel['currency'] ?? 'EUR';
+            $roomsAll = collect($hotel['rooms'] ?? []);
+
+            // Helpers
+            $toFloat = function ($v) {
+                if (is_null($v)) return null;
+                if (is_numeric($v)) return (float) $v;
+                if (is_string($v)) {
+                    $v = preg_replace('/[^0-9,.\-]/', '', $v);
+                    if (strpos($v, ',') !== false && strpos($v, '.') !== false) $v = str_replace(',', '', $v);
+                    else $v = str_replace(',', '.', $v);
+                    return is_numeric($v) ? (float) $v : null;
+                }
+                return null;
+            };
+            $afterHash = function ($v) { if (!is_string($v) || $v==='') return ''; $pos=strpos($v,'#'); return $pos===false?trim($v):trim(substr($v,$pos+1)); };
+            $removeSuffix = function ($text,$suffix){ $len=strlen($suffix); return $len>0 && substr($text,-$len)===$suffix?substr($text,0,-$len):$text; };
+            $norm = function ($s){ $s=is_string($s)?trim($s):''; $s=preg_replace('/\s+/',' ',$s); return mb_strtolower($s); };
+            $getRefdis = function(array $r){ if (isset($r['refdis']) && is_numeric($r['refdis'])) return (int)$r['refdis']; $ic=(string)($r['infrcl']??$r['infrcl_text']??''); $head=strtok($ic,'!~'); return is_numeric($head)?(int)$head:null; };
+
+            // ---- Precio a mostrar en "Desde" ----
+            $minDisplayPrice = null;
+
+            if ($N === 1) {
+                $minDisplayPrice = $roomsAll
+                    ->pluck('price_per_night')
+                    ->map($toFloat)
+                    ->filter(fn($x) => $x !== null && $x > 0)
+                    ->min();
+            } else {
+                $groups = [];
+                foreach ($roomsAll as $r) {
+                    $codtou = strtoupper((string)($r['codtou'] ?? ''));
+                    $rawSmo = $r['codsmo'] ?? ($r['room_type'] ?? '');
+                    $rawCha = $r['codcha'] ?? ($r['room_code'] ?? '');
+                    $rawRal = $r['codral'] ?? ($r['board'] ?? '');
+                    $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
+
+                    $smoLabel = $afterHash($rawSmo);
+                    $chaLabel = $afterHash($rawCha);
+                    $ralLabel = $afterHash($rawRal);
+
+                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                        $parts = explode('!~', $infrcl);
+                        $last = trim(end($parts));
+                        $first = strtok($last, '_');
+                        if ($first !== false) { $first = $removeSuffix($first, 'Room'); $chaLabel = trim($first); }
+                    }
+
+                    $roomParts = [];
+                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+
+                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+
+                    $ref = $getRefdis($r);
+                    if (!is_int($ref) || $ref < 1 || $ref > $N) continue;
+
+                    $key = $codtou.'|'.$norm($roomDesc).'|'.$norm($boardDesc);
+                    if (!isset($groups[$key])) $groups[$key] = ['refs'=>[]];
+                    $groups[$key]['refs'][$ref] = $r;
+                }
+
+                $packTotals = [];
+                foreach ($groups as $g) {
+                    $complete = true; $total = 0.0;
+                    for ($i=1; $i <= $N; $i++) {
+                        if (empty($g['refs'][$i])) { $complete=false; break; }
+                        $px = $toFloat($g['refs'][$i]['price_per_night'] ?? null);
+                        if ($px === null || $px <= 0) { $complete=false; break; }
+                        $total += $px;
+                    }
+                    if ($complete) $packTotals[] = $total;
+                }
+                $minDisplayPrice = $packTotals ? min($packTotals) : null;
+            }
+        @endphp
+
+        {{-- 2) Si NO hay habitaciones o el "Desde" es 0/nulo, saltar ANTES de abrir la card --}}
+        @if ($roomsAll->isEmpty() || $minDisplayPrice === null || $minDisplayPrice <= 0)
+            @continue
+        @endif
+
+        {{-- 3) A partir de aquí pintamos la card con seguridad --}}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow hover:shadow-lg transition p-6 flex flex-col justify-between">
+            <div class="mb-4">
+                <h2 class="text-xl font-bold text-blue-800 mb-1">{{ $hotel['name'] }}</h2>
+                <p class="text-sm text-gray-500 mb-1">⭐ Categoría: {{ $hotel['category'] }}</p>
+                <p class="text-sm text-gray-500">🏷 Código: {{ $hotel['code'] }} | 📍 Zona: {{ $hotel['zone'] }}</p>
+            </div>
+
+            {{-- 📦 Tarifas por proveedor --}}
+            @php
+                $internalCodtous = array_map('strtoupper', config('itravex.internal_codtous', ['LIB']));
+                $provCounts = collect($hotel['rooms'] ?? [])
+                    ->map(fn($r) => $r['codtou'] ?? '')
+                    ->filter()
+                    ->countBy()
+                    ->sortDesc()
+                    ->toArray();
+            @endphp
+
+            @if(!empty($provCounts))
                 <div class="card mb-4">
                     <p class="text-gray-700 text-sm font-semibold mb-2">📦 Tarifas por proveedor</p>
                     <ul class="list-disc list-inside text-sm text-gray-700 space-y-0.5">
                         @foreach($provCounts as $prov => $cnt)
-                        @php $provUpper = strtoupper($prov); $isIntProv = in_array($provUpper, $internalCodtous, true); @endphp
-                        <li>
-                            <strong>{{ $prov }}</strong>: {{ $cnt }} tarifas
-                            @if($isIntProv)
-                            <span class="badge badge-internal ml-2">Interna</span>
-                            @endif
-                        </li>
-
+                            @php $provUpper = strtoupper($prov); $isIntProv = in_array($provUpper, $internalCodtous, true); @endphp
+                            <li>
+                                <strong>{{ $prov }}</strong>: {{ $cnt }} tarifas
+                                @if($isIntProv)
+                                    <span class="badge badge-internal ml-2">Interna</span>
+                                @endif
+                            </li>
                         @endforeach
                     </ul>
                 </div>
-                @endif
+            @endif
 
-
-                <div class="mb-4">
-                    <details class="group">
-                        <summary class="flex items-center justify-between cursor-pointer select-none">
-                            <h3 class="text-base font-semibold text-gray-700">
-                                Habitaciones
-                            </h3>
-                            @php
-                            // 1) Todas las habitaciones
-                            $roomsAll = collect($hotel['rooms'] ?? []);
-
-                            // 2) Orden global por precio ascendente (nulos al final)
-                            $roomsSorted = $roomsAll
-                            ->sortBy(function ($r) {
-                            $p = $r['price_per_night'] ?? null;
-                            return is_numeric($p) ? (float) $p : INF;
-                            })
-                            ->values();
-
-                            // 3) Agrupar por proveedor (normalizado en mayúsculas; '—' si no hay codtou)
-                            $roomsByProvider = $roomsSorted->groupBy(function ($r) {
-                            return strtoupper((string)($r['codtou'] ?? '—'));
-                            });
-
-                            // 4) Orden de los proveedores por su tarifa mínima (si empatan, alfabético por clave)
-                            $roomsByProvider = $roomsByProvider->sortBy(function ($group, $prov) {
-                            $min = $group->pluck('price_per_night')->filter(fn($x) => is_numeric($x))->min();
-                            return is_numeric($min) ? (float)$min : INF;
-                            })->sortKeys();
-                            @endphp
-
-                            <span class="inline-flex items-center gap-2 text-sm text-indigo-600">
-                                {{ count($roomsSorted) }} disponibles
-                                <svg class="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                                </svg>
-                            </span>
-                        </summary>
-
-                        <ul class="space-y-2 mt-3">
-                            @foreach ($roomsSorted as $room)
-                            @php
-                            $codtou = strtoupper((string)($room['codtou'] ?? ''));
-                            $isInternalRoom = $codtou !== '' && in_array($codtou, $internalCodtous, true);
-
-                            // helpers (tus mismas funciones inline)
-                            $afterHash = function ($v) {
-                            if (!is_string($v) || $v === '') return '';
-                            $pos = strpos($v, '#');
-                            return $pos === false ? trim($v) : trim(substr($v, $pos + 1));
-                            };
-                            $removeSuffix = function ($text, $suffix) {
-                            $len = strlen($suffix);
-                            if ($len > 0 && substr($text, -$len) === $suffix) return substr($text, 0, -$len);
-                            return $text;
-                            };
-
-                            // fuentes
-                            $rawSmo = $room['codsmo'] ?? ($room['room_type'] ?? '');
-                            $rawCha = $room['codcha'] ?? ($room['room_code'] ?? '');
-                            $rawRal = $room['codral'] ?? ($room['board'] ?? '');
-                            $infrcl = $room['infrcl'] ?? ($room['infrcl_text'] ?? '');
-
-                            // labels limpios
-                            $smoLabel = $afterHash($rawSmo);
-                            $chaLabel = $afterHash($rawCha);
-                            $ralLabel = $afterHash($rawRal);
-
-                            if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
-                            $parts = explode('!~', $infrcl);
-                            $last = trim(end($parts));
-                            $first = strtok($last, '_');
-                            if ($first !== false) {
-                            $first = $removeSuffix($first, 'Room');
-                            $chaLabel = trim($first);
-                            }
-                            }
-
-                            $roomParts = [];
-                            if ($smoLabel !== '') $roomParts[] = $smoLabel;
-                            if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
-
-                            $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
-                            $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
-                            @endphp
-
-                            <li class="room-item {{ $isInternalRoom ? 'is-internal' : '' }}">
-                                @if($isInternalRoom)
-                                <span class="flag-internal">INTERNA</span>
-                                @endif
-
-                                <div class="room-left">
-                                    <p class="room-title">
-                                        <span class="font-semibold text-slate-700">Tipo -</span>
-                                        {{ $roomDesc }}
-                                    </p>
-                                    <p class="room-title">
-                                        <span class="font-semibold text-slate-700">Régimen -</span>
-                                        {{ $boardDesc }}
-                                    </p>
-
-                                    <p class="room-meta">
-                                        💶 {{ number_format((float)($room['price_per_night'] ?? 0), 2) }} {{ $hotel['currency'] }}
-                                        @if (!empty($room['availability']))
-                                        <span class="ml-2 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                                            {{ $room['availability'] }} disp.
-                                        </span>
-                                        @endif
-                                    </p>
-
-                                    {{-- Proveedor en línea (opcional, lo mantenemos para transparencia) --}}
-                                    @if(!empty($room['codtou']))
-                                    <p class="mt-1 text-xs text-slate-600">
-                                        🏷️ Proveedor:
-                                        <span class="font-semibold text-slate-800">{{ $room['codtou'] }}</span>
-                                        @if($isInternalRoom)
-                                        <span class="badge badge-internal ml-2">Interna</span>
-                                        @endif
-                                    </p>
-                                    @endif
-                                </div>
-
-                                <div class="room-right">
-                                    <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
-                                        <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
-                                        <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
-                                        <input type="hidden" name="currency" value="{{ $hotel['currency'] }}">
-                                        <input type="hidden" name="start_date" value="{{ request('fecini') }}">
-                                        <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
-
-                                        <input type="hidden" name="room_type" value="{{ $roomDesc }}">
-                                        <input type="hidden" name="board" value="{{ $boardDesc }}">
-                                        <input type="hidden" name="price_per_night" value="{{ $room['price_per_night'] }}">
-                                        <input type="hidden" name="provider" value="{{ $room['codtou'] ?? '' }}">
-                                        <input type="hidden" name="room_internal_id" value="{{ $room['room_internal_id'] ?? '' }}">
-
-                                        @if (request()->has('rooms'))
-                                        @foreach ((array) request('rooms') as $ri => $r)
-                                        <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($r['adl'] ?? 1) }}">
-                                        <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($r['chd'] ?? 0) }}">
-                                        @foreach ((array)($r['ages'] ?? []) as $ai => $age)
-                                        <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
-                                        @endforeach
-                                        @endforeach
-                                        @endif
-
-                                        <button type="submit" class="btn-sel select-btn">
-                                            <span class="spinner" aria-hidden="true"></span>
-                                            <span class="label">Seleccionar</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </li>
-                            @endforeach
-                        </ul>
-                    </details>
-                </div>
-
-
-
-
-                <div class="mt-auto">
+            {{-- Detalle de habitaciones / packs --}}
+            <div class="mb-4">
+                <details class="group">
                     @php
-                    // Moneda del hotel (fallback EUR)
-                    $currency = $hotel['currency'] ?? 'EUR';
-
-                    // Colección de rooms
+                    // 1) Todas las habitaciones del hotel ordenadas por precio:
                     $roomsAll = collect($hotel['rooms'] ?? []);
+                    $roomsSorted = $roomsAll->sortBy(function ($r) {
+                    $p = $r['price_per_night'] ?? null;
+                    return is_numeric($p) ? (float)$p : INF;
+                    })->values();
 
-                    // Normalizador robusto a float (acepta "1,004.34", "1004.34", etc.)
-                    $toFloat = function ($v) {
-                    if (is_null($v)) return null;
-                    if (is_numeric($v)) return (float) $v;
-                    if (is_string($v)) {
-                    // elimina cualquier carácter no dígito o punto/coma, convierte coma decimal a punto
-                    $v = preg_replace('/[^0-9,.\-]/', '', $v); // deja dígitos, . , y -
-                    // si hay coma y punto, asumimos coma como separador de miles => quita comas
-                    if (strpos($v, ',') !== false && strpos($v, '.') !== false) {
-                    $v = str_replace(',', '', $v); // "1,004.34" -> "1004.34"
-                    } else {
-                    // si solo hay comas, asúmelas como decimales: "1004,34" -> "1004.34"
-                    $v = str_replace(',', '.', $v);
+                    // === Preparación de ocupación y helpers ===
+                    $roomsReq = request()->has('rooms') ? (array) request('rooms') : [];
+                    $roomsEffLocal = is_array($roomsEff ?? null) ? $roomsEff : $roomsReq;
+                    $requestedRoomsCount = max(0, (int) collect($roomsEffLocal)->count());
+                    $N = max(1, min(4, $requestedRoomsCount));
+
+                    $afterHash = function ($v) { if (!is_string($v) || $v==='') return ''; $pos=strpos($v,'#'); return $pos===false?trim($v):trim(substr($v,$pos+1)); };
+                    $removeSuffix = function ($text,$suffix){ $len=strlen($suffix); return $len>0 && substr($text,-$len)===$suffix?substr($text,0,-$len):$text; };
+                    $norm = function ($s){ $s=is_string($s)?trim($s):''; $s=preg_replace('/\s+/',' ',$s); return mb_strtolower($s); };
+                    $getRefdis = function(array $r){ if (isset($r['refdis']) && is_numeric($r['refdis'])) return (int)$r['refdis']; $ic=(string)($r['infrcl']??$r['infrcl_text']??''); $head=strtok($ic,'!~'); return is_numeric($head)?(int)$head:null; };
+                    $internalCodtous = array_map('strtoupper', config('itravex.internal_codtous', ['LIB']));
+
+                    // 2) Packs solo si N>=2
+                    $packs = [];
+                    if ($N >= 2) {
+                    $groups = [];
+                    foreach ($roomsSorted as $r) {
+                    $codtou = strtoupper((string)($r['codtou'] ?? ''));
+                    $rawSmo = $r['codsmo'] ?? ($r['room_type'] ?? '');
+                    $rawCha = $r['codcha'] ?? ($r['room_code'] ?? '');
+                    $rawRal = $r['codral'] ?? ($r['board'] ?? '');
+                    $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
+
+                    $smoLabel = $afterHash($rawSmo);
+                    $chaLabel = $afterHash($rawCha);
+                    $ralLabel = $afterHash($rawRal);
+
+                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                    $parts = explode('!~', $infrcl);
+                    $last = trim(end($parts));
+                    $first = strtok($last, '_');
+                    if ($first !== false) { $first = $removeSuffix($first, 'Room'); $chaLabel = trim($first); }
                     }
-                    return is_numeric($v) ? (float) $v : null;
-                    }
-                    return null;
-                    };
 
-                    // Mínimo real entre todas las rooms
-                    $minPrice = $roomsAll
-                    ->pluck('price_per_night')
-                    ->map($toFloat)
-                    ->filter(fn ($x) => $x !== null)
-                    ->min();
-                    @endphp
+                    $roomParts = [];
+                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
 
-                    <p class="text-right text-lg font-bold text-green-600">
-                        @if ($minPrice !== null)
-                        Desde {{ number_format($minPrice, 2) }} {{ $currency }}
-                        @else
-                        Desde —
-                        @endif
-                    </p>
+                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
 
-                </div>
+                    $ref = $getRefdis($r);
+                    if (!is_int($ref) || $ref < 1 || $ref> $N) continue;
+
+                        $key = $codtou.'|'.$norm($roomDesc).'|'.$norm($boardDesc);
+                        if (!isset($groups[$key])) $groups[$key] = ['prov'=>$codtou,'desc'=>$roomDesc,'board'=>$boardDesc,'refs'=>[]];
+                        $groups[$key]['refs'][$ref] = $r;
+                        }
+
+                        foreach ($groups as $g) {
+                        $complete = true; $total = 0.0;
+                        for ($i=1; $i<=$N; $i++) {
+                            if (empty($g['refs'][$i])) { $complete=false; break; }
+                            $total +=(float)($g['refs'][$i]['price_per_night'] ?? 0);
+                            }
+                            if ($complete) $packs[]=['prov'=>$g['prov'],'desc'=>$g['desc'],'board'=>$g['board'],'refs'=>$g['refs'],'total'=>$total];
+                            }
+                            usort($packs, fn($a,$b) => $a['total'] <=> $b['total']);
+                                }
+
+                                // 3) Contador para el summary
+                                $availableCount = ($N === 1) ? $roomsSorted->count() : count($packs);
+                                @endphp
+
+                                <summary class="flex items-center justify-between cursor-pointer select-none">
+                                    <h3 class="text-base font-semibold text-gray-700">Habitaciones</h3>
+                                    <span class="inline-flex items-center gap-2 text-sm text-indigo-600">
+                                        {{ $availableCount }} disponibles
+                                        <svg class="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                                        </svg>
+                                    </span>
+                                </summary>
+
+                                @php
+                                $roomsReq = request()->has('rooms') ? (array) request('rooms') : [];
+                                $roomsEffLocal = is_array($roomsEff ?? null) ? $roomsEff : $roomsReq;
+                                $requestedRoomsCount = max(0, (int) collect($roomsEffLocal)->count());
+                                $N = max(1, min(4, $requestedRoomsCount));
+
+                                $afterHash = function ($v) { if (!is_string($v) || $v==='') return ''; $pos=strpos($v,'#'); return $pos===false?trim($v):trim(substr($v,$pos+1)); };
+                                $removeSuffix = function ($text,$suffix){ $len=strlen($suffix); return $len>0 && substr($text,-$len)===$suffix?substr($text,0,-$len):$text; };
+                                $norm = function ($s){ $s=is_string($s)?trim($s):''; $s=preg_replace('/\s+/',' ',$s); return mb_strtolower($s); };
+                                $getRefdis = function(array $r){ if (isset($r['refdis']) && is_numeric($r['refdis'])) return (int)$r['refdis']; $ic=(string)($r['infrcl']??$r['infrcl_text']??''); $head=strtok($ic,'!~'); return is_numeric($head)?(int)$head:null; };
+                                $internalCodtous = array_map('strtoupper', config('itravex.internal_codtous', ['LIB']));
+                                @endphp
+
+                                <ul class="space-y-2 mt-3">
+                                    @if ($N === 1)
+                                    @forelse ($roomsSorted as $r)
+                                    @php
+                                    $codtou = strtoupper((string)($r['codtou'] ?? ''));
+                                    $isInternal = $codtou !== '' && in_array($codtou, $internalCodtous, true);
+                                    $rawSmo = $r['codsmo'] ?? ($r['room_type'] ?? '');
+                                    $rawCha = $r['codcha'] ?? ($r['room_code'] ?? '');
+                                    $rawRal = $r['codral'] ?? ($r['board'] ?? '');
+                                    $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
+
+                                    $smoLabel = $afterHash($rawSmo);
+                                    $chaLabel = $afterHash($rawCha);
+                                    $ralLabel = $afterHash($rawRal);
+
+                                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                                    $parts = explode('!~', $infrcl);
+                                    $last = trim(end($parts));
+                                    $first = strtok($last, '_');
+                                    if ($first !== false) { $first = $removeSuffix($first, 'Room'); $chaLabel = trim($first); }
+                                    }
+
+                                    $roomParts = [];
+                                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+
+                                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+                                    $price = (float) ($r['price_per_night'] ?? 0);
+                                    @endphp
+
+                                    <li class="room-item {{ $isInternal ? 'is-internal' : '' }}">
+                                        @if($isInternal)<span class="flag-internal">INTERNA</span>@endif
+
+                                        <div class="room-left">
+                                            <p class="room-title"><span class="font-semibold text-slate-700">Tipo —</span> {{ $roomDesc }}</p>
+                                            <p class="room-title"><span class="font-semibold text-slate-700">Régimen —</span> {{ $boardDesc }}</p>
+                                            @if(!empty($codtou))
+                                            <p class="mt-1 text-xs text-slate-600">
+                                                🏷️ Proveedor: <span class="font-semibold text-slate-800">{{ $codtou }}</span>
+                                                @if($isInternal) <span class="badge badge-internal ml-2">Interna</span> @endif
+                                            </p>
+                                            @endif
+                                        </div>
+
+                                        <div class="room-right">
+                                            <div class="room-price">{{ number_format($price, 2) }} {{ $hotel['currency'] ?? 'EUR' }}</div>
+                                            <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
+                                                <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
+                                                <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
+                                                <input type="hidden" name="currency" value="{{ $hotel['currency'] ?? 'EUR' }}">
+                                                <input type="hidden" name="start_date" value="{{ request('fecini') }}">
+                                                <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+                                                <input type="hidden" name="room_type" value="{{ $roomDesc }}">
+                                                <input type="hidden" name="board" value="{{ $boardDesc }}">
+                                                <input type="hidden" name="provider" value="{{ $codtou }}">
+                                                <input type="hidden" name="price_per_night" value="{{ $price }}">
+                                                <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] ?? '' }}">
+                                                <input type="hidden" name="room_internal_id" value="{{ $r['room_internal_id'] ?? '' }}">
+                                                @if (request()->has('rooms'))
+                                                @foreach ((array) request('rooms') as $ri => $rr)
+                                                <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($rr['adl'] ?? 1) }}">
+                                                <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($rr['chd'] ?? 0) }}">
+                                                @foreach ((array)($rr['ages'] ?? []) as $ai => $age)
+                                                <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
+                                                @endforeach
+                                                @endforeach
+                                                @endif
+                                                <button type="submit" class="btn-sel select-btn">
+                                                    <span class="spinner" aria-hidden="true"></span>
+                                                    <span class="label">Seleccionar</span>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </li>
+                                    @empty
+                                    <li class="text-sm text-slate-600">No hay habitaciones disponibles.</li>
+                                    @endforelse
+                                    @else
+                                    @php
+                                    $groups = [];
+                                    foreach ($roomsSorted as $r) {
+                                    $codtou = strtoupper((string)($r['codtou'] ?? ''));
+                                    $rawSmo = $r['codsmo'] ?? ($r['room_type'] ?? '');
+                                    $rawCha = $r['codcha'] ?? ($r['room_code'] ?? '');
+                                    $rawRal = $r['codral'] ?? ($r['board'] ?? '');
+                                    $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
+
+                                    $smoLabel = $afterHash($rawSmo);
+                                    $chaLabel = $afterHash($rawCha);
+                                    $ralLabel = $afterHash($rawRal);
+
+                                    if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
+                                    $parts = explode('!~', $infrcl);
+                                    $last = trim(end($parts));
+                                    $first = strtok($last, '_');
+                                    if ($first !== false) { $first = $removeSuffix($first, 'Room'); $chaLabel = trim($first); }
+                                    }
+
+                                    $roomParts = [];
+                                    if ($smoLabel !== '') $roomParts[] = $smoLabel;
+                                    if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+
+                                    $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+                                    $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+
+                                    $ref = $getRefdis($r);
+                                    if (!is_int($ref) || $ref < 1 || $ref> $N) continue;
+
+                                        $key = $codtou.'|'.$norm($roomDesc).'|'.$norm($boardDesc);
+                                        if (!isset($groups[$key])) $groups[$key] = ['prov'=>$codtou,'desc'=>$roomDesc,'board'=>$boardDesc,'refs'=>[]];
+                                        $groups[$key]['refs'][$ref] = $r;
+                                        }
+                                        $packs = [];
+                                        foreach ($groups as $g) {
+                                        $complete = true; $total = 0.0;
+                                        for ($i=1; $i<=$N; $i++) {
+                                            if (empty($g['refs'][$i])) { $complete=false; break; }
+                                            $total +=(float)($g['refs'][$i]['price_per_night'] ?? 0);
+                                            }
+                                            if ($complete) $packs[]=['prov'=>$g['prov'],'desc'=>$g['desc'],'board'=>$g['board'],'refs'=>$g['refs'],'total'=>$total];
+                                            }
+                                            usort($packs, fn($a,$b) => $a['total'] <=> $b['total']);
+                                                @endphp
+
+                                                @forelse ($packs as $pack)
+                                                <li class="room-pack rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
+                                                    <div class="pack-head">
+                                                        <div class="min-w-0 space-y-2 text-slate-700 desc">
+                                                            <p class="text-sm"><span class="font-semibold">Tipo —</span> <span>{{ $pack['desc'] }}</span></p>
+                                                            <p class="text-sm"><span class="font-semibold">Régimen —</span> <span>{{ $pack['board'] }}</span></p>
+                                                            @php $prov = $pack['prov'] ?? '—'; @endphp
+                                                            <div class="flex items-center gap-2 text-xs">
+                                                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 ring-1 ring-amber-200 text-amber-800">Proveedor</span>
+                                                                <span class="font-semibold text-slate-900">{{ $prov }}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="shrink-0 flex flex-col items-stretch md:items-end gap-2">
+                                                            <div class="text-right">
+                                                                <div class="text-2xl font-semibold text-slate-900">{{ number_format($pack['total'], 2) }} {{ $hotel['currency'] ?? 'EUR' }}</div>
+                                                                <div class="text-xs text-slate-500">Total {{ $N }} habitaciones</div>
+                                                            </div>
+
+                                                            <form method="GET" action="{{ route('availability.lock.form') }}" class="w-full md:w-auto">
+                                                                <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
+                                                                <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
+                                                                <input type="hidden" name="currency" value="{{ $hotel['currency'] ?? 'EUR' }}">
+                                                                <input type="hidden" name="start_date" value="{{ request('fecini') }}">
+                                                                <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+                                                                <input type="hidden" name="room_type" value="{{ $pack['desc'] }}">
+                                                                <input type="hidden" name="board" value="{{ $pack['board'] }}">
+                                                                <input type="hidden" name="provider" value="{{ $prov }}">
+                                                                <input type="hidden" name="price_total" value="{{ $pack['total'] }}">
+                                                                <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] ?? '' }}">
+                                                                @foreach ($pack['refs'] as $i => $rr)
+                                                                <input type="hidden" name="pack[{{ $i }}][room_internal_id]" value="{{ $rr['room_internal_id'] ?? '' }}">
+                                                                <input type="hidden" name="pack[{{ $i }}][refdis]" value="{{ $rr['refdis'] ?? '' }}">
+                                                                <input type="hidden" name="pack[{{ $i }}][price_per_night]" value="{{ (float)($rr['price_per_night'] ?? 0) }}">
+                                                                @endforeach
+                                                                @if (request()->has('rooms'))
+                                                                @foreach ((array) request('rooms') as $ri => $rr)
+                                                                <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($rr['adl'] ?? 1) }}">
+                                                                <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($rr['chd'] ?? 0) }}">
+                                                                @foreach ((array)($rr['ages'] ?? []) as $ai => $age)
+                                                                <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
+                                                                @endforeach
+                                                                @endforeach
+                                                                @endif
+                                                                <button type="submit" class="btn-sel select-btn">
+                                                                    <span class="spinner" aria-hidden="true"></span>
+                                                                    <span class="label">Seleccionar pack</span>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mt-4 flex flex-wrap gap-2 rooms-grid">
+                                                        @foreach ($pack['refs'] as $i => $r)
+                                                        @php $ref = isset($r['refdis']) ? (int)$r['refdis'] : ($getRefdis($r) ?? null); $p = (float)($r['price_per_night'] ?? 0); @endphp
+                                                        <div class="room-chip">
+                                                            <div class="flex items-center justify-between gap-3">
+                                                                <div class="text-xs font-medium text-slate-600">Hab {{ $i }}</div>
+                                                                <div class="text-[11px] rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">refdis {{ $ref ?? '—' }}</div>
+                                                            </div>
+                                                            <div class="mt-1 text-sm font-semibold text-slate-900">{{ number_format($p, 2) }} {{ $hotel['currency'] ?? 'EUR' }}</div>
+                                                        </div>
+                                                        @endforeach
+                                                    </div>
+                                                </li>
+                                                @empty
+                                                <li class="text-sm text-slate-600">No hay packs de {{ $N }} habitaciones disponibles.</li>
+                                                @endforelse
+                                                @endif
+                                </ul>
+                </details>
             </div>
-            @empty
-            <div class="col-span-full text-center text-gray-500 text-lg mt-10">
-                ❌ No se encontraron hoteles para los parámetros seleccionados.
+
+            {{-- Pie: "Desde" ya validado (> 0) --}}
+            <div class="mt-auto">
+                <p class="text-right text-lg font-bold text-green-600">
+                    Desde {{ number_format($minDisplayPrice, 2) }} {{ $currency }}
+                </p>
             </div>
-            @endforelse
         </div>
+        @empty
+        <div class="col-span-full text-center text-gray-500 text-lg mt-10">
+            ❌ No se encontraron hoteles para los parámetros seleccionados.
+        </div>
+        @endforelse
+    </div>
 
-        {{-- (SIN paginación abajo) --}}
+
+    {{-- (SIN paginación abajo) --}}
     </div>
     @if(!empty($firstPayload))
     <div id="xml-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -972,6 +1199,24 @@
             }
         });
     </script>
+    <style>
+        .room-pack,
+        .room-pack * {
+            word-break: normal !important;
+            overflow-wrap: anywhere;
+            white-space: normal;
+        }
+    </style>
+    <style>
+        .pack-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 1rem;
+        }
+    </style>
+
+
 
 
 </x-app-layout>

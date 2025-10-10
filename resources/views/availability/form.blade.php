@@ -17,8 +17,7 @@
             autocapitalize="off"
             spellcheck="false"
             class="grid grid-cols-1 gap-6 md:grid-cols-2"
-            id="availability-form"
-          >
+            id="availability-form">
             @csrf
 
             {{-- ======================== BÚSQUEDA POR ZONA ======================== --}}
@@ -263,7 +262,6 @@
     </div>
   </div>
 
-  {{-- =========================== SCRIPTS =========================== --}}
   <script>
     (function() {
       const inputName = document.getElementById('area_name');
@@ -309,9 +307,9 @@
           btn.className = 'w-full text-left px-3 py-2 hover:bg-slate-100 focus:bg-slate-100';
           btn.dataset.index = idx;
           btn.innerHTML = `
-            <div class="text-sm font-medium">${escapeHtml(it.name ?? '')}</div>
-            <div class="text-xs text-slate-500">${escapeHtml(it.code ?? '')}</div>
-          `;
+          <div class="text-sm font-medium">${escapeHtml(it.name ?? '')}</div>
+          <div class="text-xs text-slate-500">${escapeHtml(it.code ?? '')}</div>
+        `;
           btn.addEventListener('click', () => selectIndex(idx));
           frag.appendChild(btn);
         });
@@ -334,7 +332,7 @@
           // Anti-autofill: al abrir, vaciamos inmediatamente cualquier relleno forzado del navegador
           if (opened) {
             setTimeout(() => {
-              ['endpoint_ui','codsys_ui','codage_ui','user_ui','pass_ui','codtou_ui'].forEach(id => {
+              ['endpoint_ui', 'codsys_ui', 'codage_ui', 'user_ui', 'pass_ui', 'codtou_ui'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el && el.matches(':-webkit-autofill')) el.value = '';
               });
@@ -343,11 +341,13 @@
         });
 
         // Anti-autofill adicional: readonly breve al cargar
-        ['endpoint_ui','codsys_ui','codage_ui','user_ui','pass_ui','codtou_ui'].forEach(id => {
+        ['endpoint_ui', 'codsys_ui', 'codage_ui', 'user_ui', 'pass_ui', 'codtou_ui'].forEach(id => {
           const el = document.getElementById(id);
           if (el) {
             el.readOnly = true;
-            setTimeout(() => { el.readOnly = false; }, 400);
+            setTimeout(() => {
+              el.readOnly = false;
+            }, 400);
           }
         });
       })();
@@ -375,7 +375,7 @@
           '>': '&gt;',
           '"': '&quot;',
           "'": '&#39;'
-        }[s]));
+        } [s]));
       }
 
       async function queryServer(q) {
@@ -385,7 +385,9 @@
           const url = new URL(ENDPOINT, window.location.origin);
           url.searchParams.set('q', q);
           url.searchParams.set('limit', '10');
-          const res = await fetch(url.toString(), { signal: abortCtrl.signal });
+          const res = await fetch(url.toString(), {
+            signal: abortCtrl.signal
+          });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const data = await res.json();
           lastItems = data.items || [];
@@ -476,16 +478,27 @@
       // Estado inicial
       updateCounter();
     })();
-  </script>
-
-  <script>
     (function() {
+      const MAX_ROOMS = 4;
+
       const container = document.getElementById('rooms-container');
       const tpl = document.getElementById('room-template');
       const addBtn = document.getElementById('add-room');
       if (!container || !tpl || !addBtn) return;
 
       let idx = 0;
+
+      function currentRoomsCount() {
+        return container.querySelectorAll('.room-row').length;
+      }
+
+      function enforceAddButtonState() {
+        const n = currentRoomsCount();
+        addBtn.disabled = n >= MAX_ROOMS;
+        addBtn.classList.toggle('opacity-50', addBtn.disabled);
+        addBtn.classList.toggle('cursor-not-allowed', addBtn.disabled);
+        addBtn.setAttribute('aria-disabled', String(addBtn.disabled));
+      }
 
       function renderIndexes() {
         [...container.querySelectorAll('.room-row')].forEach((row, i) => {
@@ -502,9 +515,16 @@
         const a = parseInt(adl.value || '0', 10);
         const c = parseInt(chd.value || '0', 10);
 
-        if (a < 1) { adl.setCustomValidity('Debe haber al menos 1 adulto'); } else { adl.setCustomValidity(''); }
-        if (a + c > 4) { chd.setCustomValidity('Máximo 4 personas por habitación'); } else { chd.setCustomValidity(''); }
-
+        if (a < 1) {
+          adl.setCustomValidity('Debe haber al menos 1 adulto');
+        } else {
+          adl.setCustomValidity('');
+        }
+        if (a + c > 4) {
+          chd.setCustomValidity('Máximo 4 personas por habitación');
+        } else {
+          chd.setCustomValidity('');
+        }
 
         // Generar inputs de edades = nº de niños
         const current = agesWrap.querySelectorAll('input[type="number"]').length;
@@ -529,6 +549,12 @@
         adl: 2,
         chd: 0
       }) {
+        if (currentRoomsCount() >= MAX_ROOMS) {
+          // Doble seguridad
+          enforceAddButtonState();
+          return;
+        }
+
         const node = document.importNode(tpl.content, true);
         const row = node.firstElementChild;
         row.dataset.idx = idx;
@@ -552,23 +578,25 @@
         row.querySelector('.remove-room')?.addEventListener('click', () => {
           row.remove();
           renderIndexes();
+          enforceAddButtonState();
         });
 
         // Inicializar
         syncCapacity(row);
         idx++;
         renderIndexes();
+        enforceAddButtonState();
       }
 
       addBtn.addEventListener('click', () => addRoom());
+
       // Crea una habitación por defecto
       addRoom({
         adl: 2,
         chd: 0
       });
+
     })();
-  </script>
-  <script>
     (function() {
       // Elementos del DOM
       const hotelNameInput = document.getElementById('hotel_name');
@@ -628,8 +656,7 @@
           btn.type = 'button';
           btn.className = 'w-full text-left px-3 py-2 hover:bg-slate-100 focus:bg-slate-100';
 
-          // Línea principal: Nombre del hotel
-          // Línea secundaria: codser y zona
+          // Nombre / codser / zona
           const name = escapeHtml(it.name ?? '');
           const cod = escapeHtml(it.codser ?? '');
           const zname = escapeHtml(it.zone_name ?? '');
@@ -660,10 +687,10 @@
         const item = h_lastItems[idx];
         if (!item) return;
 
-        // 1) Pinta el nombre en el input (estético)
+        // 1) Pinta el nombre en el input
         hotelNameInput.value = item.name || '';
 
-        // 2) Añade/mezcla el codser al textarea, evitando duplicados
+        // 2) Mezcla el codser en el textarea (sin duplicados)
         const existing = uniqueTokensFromText(hotelCodesTA.value);
         if (item.codser) {
           if (!existing.includes(String(item.codser))) {
@@ -671,7 +698,7 @@
           }
         }
 
-        // Reescribe formateando (20 por línea como ya haces con zonas)
+        // 20 por línea
         const chunkSize = 20;
         const lines = [];
         for (let i = 0; i < existing.length; i += chunkSize) {
@@ -680,15 +707,12 @@
         hotelCodesTA.value = lines.join('\n');
         updateHotelCounter();
 
-        // 3) Si el código de zona está VACÍO, lo rellenamos con la del hotel seleccionado
+        // 3) Autorrellenar zona si está vacía
         if (codzgeInput && (!codzgeInput.value || !codzgeInput.value.trim())) {
           if (item.zone_code) {
             codzgeInput.value = item.zone_code;
           }
         }
-        // Si ya hay zona y es distinta, no la tocamos (evitamos romper intersección).
-        // Si quieres avisar, puedes mostrar un pequeño aviso aquí:
-        // else if (codzgeInput.value && item.zone_code && codzgeInput.value !== item.zone_code) { /* opcional: toast */ }
 
         // 4) Oculta sugerencias
         hotelSuggestBox.classList.add('hidden');
@@ -703,7 +727,7 @@
           url.searchParams.set('q', q);
           url.searchParams.set('limit', '10');
 
-          // Si hay zona ya escrita, la mandamos como filtro opcional (sin obligar)
+          // Filtro opcional por zona si existe
           if (codzgeInput && codzgeInput.value && /^A-\d+$/i.test(codzgeInput.value.trim())) {
             url.searchParams.set('zoneCode', codzgeInput.value.trim());
           }
@@ -769,6 +793,30 @@
         }
       });
 
+      // ====== Validación de tope 4 habitaciones en el submit ======
+      const MAX_ROOMS = 4;
+      const formEl = document.getElementById('availability-form');
+
+      function countRooms() {
+        const container = document.getElementById('rooms-container');
+        if (!container) return 0;
+        return container.querySelectorAll('.room-row').length;
+      }
+
+      if (formEl) {
+        formEl.addEventListener('submit', (e) => {
+          const n = countRooms();
+          if (n > MAX_ROOMS) {
+            e.preventDefault();
+            alert(`Máximo ${MAX_ROOMS} habitaciones.\nAhora mismo tienes ${n}. Quita habitaciones hasta ${MAX_ROOMS}.`);
+            try {
+              document.getElementById('add-room')?.focus();
+            } catch (_) {}
+          }
+        });
+      }
+      // ============================================================
+
       // Contador dinámico por si el usuario edita a mano
       hotelCodesTA.addEventListener('input', updateHotelCounter);
 
@@ -776,12 +824,13 @@
       updateHotelCounter();
     })();
   </script>
+
   <style>
-input:-webkit-autofill {
-  outline: 2px solid orange !important;
-  -webkit-text-fill-color: #0f172a !important;
-}
-</style>
+    input:-webkit-autofill {
+      outline: 2px solid orange !important;
+      -webkit-text-fill-color: #0f172a !important;
+    }
+  </style>
 
 
 
