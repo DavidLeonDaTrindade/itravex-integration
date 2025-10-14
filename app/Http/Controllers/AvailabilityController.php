@@ -1058,11 +1058,11 @@ XML;
 
     public function submitLock(Request $request)
     {
-        Log::channel('itravex')->info("⚠️ Entrando a submitLock");
+        Log::channel('itravex')->info("⚠️ Entrando a submitLock (soporte multi-habitación)");
 
-        // Validación básica (sin contract_type porque NO lo enviaremos)
+        // 🔹 Validación: admite pack o habitación única
         $data = $request->validate([
-            'hotel_code'        => 'required|string',   // codser (no lo enviamos en el XML de bloqueo)
+            'hotel_code'        => 'required|string',
             'birthdates'        => 'required|array',
             'birthdates.*'      => 'required|date',
             'codzge'            => 'required|string',
@@ -1070,19 +1070,47 @@ XML;
             'end_date'          => 'required|date',
             'hotel_name'        => 'required|string',
             'board'             => 'required|string',
-            'price_per_night'   => 'required',
             'currency'          => 'required|string',
-            'room_internal_id'  => 'required|string',   // puede ser "3#57" y lo respetaremos tal cual
-            'hotel_internal_id' => 'required|string',   // p.ej. "3"
+            'hotel_internal_id' => 'required|string',
+
+            // Soporte multi-habitación
+            'pack'                          => 'nullable|array|min:1',
+            'pack.*.room_internal_id'       => 'required_with:pack|string',
+            'pack.*.price_per_night'        => 'required_with:pack|numeric',
+            'pack.*.refdis'                 => 'nullable|string',
+
+            // Compatibilidad con habitación única
+            'room_internal_id'              => 'nullable|string',
+            'price_per_night'               => 'nullable',
         ]);
 
-        // Config proveedor
+        // 🔹 Normalizamos las habitaciones (una o varias)
+        $rooms = [];
+        if (!empty($data['pack'])) {
+            foreach ($data['pack'] as $r) {
+                $rooms[] = [
+                    'room_internal_id' => (string)($r['room_internal_id'] ?? ''),
+                    'price_per_night'  => $r['price_per_night'] ?? null,
+                    'refdis'           => $r['refdis'] ?? null,
+                ];
+            }
+        } elseif (!empty($data['room_internal_id'])) {
+            $rooms[] = [
+                'room_internal_id' => (string)$data['room_internal_id'],
+                'price_per_night'  => $data['price_per_night'] ?? null,
+                'refdis'           => $data['refdis'] ?? null,
+            ];
+        } else {
+            return back()->withErrors(['No se recibió ninguna habitación válida (ni pack ni individual).']);
+        }
+
+        // 🔹 Config del proveedor
         $cfg = session('provider_cfg') ?? $this->getProviderConfig($request);
         if (empty($cfg['endpoint'])) {
             return back()->withErrors(['Endpoint no configurado (provider_cfg.endpoint está vacío).']);
         }
 
-        // Sesión con el proveedor
+        // 🔹 Sesión con el proveedor
         $sessionId = session('ideses');
         if (!$sessionId) {
             $sessionId = $this->openSession($cfg);
@@ -1092,7 +1120,7 @@ XML;
             session(['ideses' => $sessionId, 'ideses_created_at' => now()]);
         }
 
-        // Pasajeros (formato dd/mm/YYYY)
+        // 🔹 Pasajeros (formato dd/mm/YYYY)
         $adlXml = '';
         $pasidXml = '';
         foreach ($data['birthdates'] as $i => $birthdate) {
@@ -1101,34 +1129,38 @@ XML;
             $pasidXml .= "<pasid>{$id}</pasid>";
         }
 
-        // OJO: replicamos el patrón que funcionó:
-        // - bloser@id = hotel_internal_id tal cual
-        // - disssmo@id = room_internal_id tal cual (permitiendo "3#57")
-        // - NO enviamos fecini/fecfin/codser/tipcon/tarifi
+        // 🔹 IDs padre
         $bloserId = (string) $data['hotel_internal_id'];
-        $dissmoId = (string) $data['room_internal_id'];
 
-        $xml = <<<XML
-<BloqueoServicioPeticion>
-  <ideses>{$sessionId}</ideses>
-  <codtou>{$cfg['codtou']}</codtou>
-    <tipcon>C</tipcon> <!-- 🔧 AÑADIDO -->
-  <pasage>{$adlXml}</pasage>
-  <bloser id="{$bloserId}">
+        // 🔹 Generar varios <dissmo> si hay múltiples habitaciones
+        $dissmoXml = '';
+        foreach ($rooms as $r) {
+            $dissmoId = $r['room_internal_id'];
+            $dissmoXml .= <<<XML
     <dissmo id="{$dissmoId}">
       <numuni>1</numuni>
       {$pasidXml}
     </dissmo>
-  </bloser>
+    XML;
+        }
+
+        // 🔹 Construcción del XML final
+        $xml = <<<XML
+<BloqueoServicioPeticion>
+  <ideses>{$sessionId}</ideses>
+  <codtou>{$cfg['codtou']}</codtou>
   <tipcon>V</tipcon>
+  <pasage>{$adlXml}</pasage>
+  <bloser id="{$bloserId}">
+    {$dissmoXml}
+  </bloser>
   <accion>A</accion>
 </BloqueoServicioPeticion>
 XML;
 
-
         Log::channel('itravex')->debug("🔵 XML de petición BloqueoServicio:\n" . $xml);
 
-
+        // 🔹 Envío al proveedor
         $response = Http::withHeaders([
             'Accept-Encoding' => 'gzip',
             'Content-Type'    => 'application/xml',
@@ -1143,17 +1175,17 @@ XML;
         $raw = $response->body();
         Log::channel('itravex')->info("🟢 Respuesta BloqueoServicio RAW:\n" . $raw);
 
+        // 🔹 Parseo XML
         $xmlResponse = @simplexml_load_string($raw);
         if ($xmlResponse === false) {
             Log::channel('itravex')->error("❌ No se pudo parsear XML de BloqueoServicio");
             return back()->withErrors(['Respuesta inválida del proveedor']);
         }
 
-        // Errores de negocio
+        // 🔹 Errores del proveedor
         $tiperr = trim((string)($xmlResponse->tiperr ?? ''));
         $txterr = trim((string)($xmlResponse->txterr ?? ''));
         $coderr = trim((string)($xmlResponse->coderr ?? ''));
-
         if ($txterr !== '' || $coderr !== '') {
             Log::channel('itravex')->error("❌ Bloqueo rechazado por el proveedor", [
                 'coderr' => $coderr ?: '(vacío)',
@@ -1163,7 +1195,7 @@ XML;
             return back()->withErrors(['Error del proveedor en el bloqueo: ' . ($txterr ?: $coderr)]);
         }
 
-        // Extraer LOCATA
+        // 🔹 Extraer locata
         $locata = null;
         try {
             $nodes = $xmlResponse->xpath('//locata');
@@ -1171,16 +1203,15 @@ XML;
                 $locata = trim((string)$nodes[0]);
             }
         } catch (\Throwable $e) {
+            // no-op
         }
 
-        if (!$locata) {
-            if (isset($xmlResponse->resser->locata)) {
-                $locata = (string)$xmlResponse->resser->locata;
-            } elseif (isset($xmlResponse->resser->estsmo->locata)) {
-                $locata = (string)$xmlResponse->resser->estsmo->locata;
-            } elseif (isset($xmlResponse->locata)) {
-                $locata = (string)$xmlResponse->locata;
-            }
+        if (!$locata && isset($xmlResponse->resser->locata)) {
+            $locata = (string)$xmlResponse->resser->locata;
+        } elseif (!$locata && isset($xmlResponse->resser->estsmo->locata)) {
+            $locata = (string)$xmlResponse->resser->estsmo->locata;
+        } elseif (!$locata && isset($xmlResponse->locata)) {
+            $locata = (string)$xmlResponse->locata;
         }
 
         if (!$locata && preg_match('/<locata>\s*([^<]+)\s*<\/locata>/i', $raw, $m)) {
@@ -1190,18 +1221,18 @@ XML;
         if (!$locata) {
             Log::channel('itravex')->warning("⚠️ Bloqueo sin <locata> y sin errores formales.", [
                 'sent_bloser_id' => $bloserId,
-                'sent_dissmo_id' => $dissmoId,
+                'rooms' => $rooms,
             ]);
             return back()->withErrors(['El proveedor no devolvió localizador. Revisa que los IDs correspondan a la misma tarifa y vuelve a intentarlo.']);
         }
 
-        // OK
+        // 🔹 OK
         session([
             'locata' => $locata,
             'ideses_created_at' => now(),
         ]);
-        Log::channel('itravex')->info("📌 Locata almacenada en sesión: {$locata}");
 
+        Log::channel('itravex')->info("📌 Locata almacenada en sesión: {$locata}");
         session()->flash('form_data', $data);
 
         return redirect()
@@ -1216,13 +1247,32 @@ XML;
 
 
 
+
     public function showLockForm(Request $request)
     {
         \Log::channel('itravex')->debug('showLockForm session snapshot', session()->only(['locata', 'success', 'form_data']));
+
+        // Trae lo que ya tenías (form_data flasheado o lo que venga en la URL)
+        $data = session('form_data', $request->all());
+
+        // Si vienen distribuciones (distri) en la query, mézclalas con el resto
+        if ($request->has('distri')) {
+            $data['distri'] = $request->input('distri');
+        }
+
+        // Si no viene, pero en form_data no está, intenta recuperarlo de sesión
+        if (!isset($data['distri']) && session()->has('distri')) {
+            $data['distri'] = session('distri');
+        }
+
+        // Guarda en sesión para persistencia durante el bloqueo
+        session(['distri' => $data['distri'] ?? []]);
+
         return view('availability.lock-form', [
-            'data' => session('form_data', $request->all())
+            'data' => $data,
         ]);
     }
+
 
 
     public function closeReservation(Request $request)

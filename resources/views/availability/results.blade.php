@@ -265,6 +265,40 @@
 
 
 
+    @php
+    /**
+     * Genera inputs hidden de distri[<hab>] para el lock:
+     * - distri[i][numadl]
+     * - distri[i][numnin]
+     * - distri[i][edanin][k]
+     */
+    $buildDistriInputs = function ($roomsOcc) {
+        $html = '';
+        if (!is_array($roomsOcc) || empty($roomsOcc)) return $html;
+
+        // Queremos índices 1..N (el lock-form y el controlador esperan esos índices)
+        $i = 1;
+        foreach ($roomsOcc as $r) {
+            $numadl = (int) ($r['adl'] ?? $r['numadl'] ?? $r['adults'] ?? 2);
+            $numnin = (int) ($r['chd'] ?? $r['numnin'] ?? $r['children'] ?? 0);
+            $ages   = (array) ($r['ages'] ?? []); // edades de niños si llegaron en la búsqueda
+
+            $html .= '<input type="hidden" name="distri['.$i.'][numadl]" value="'.$numadl.'">';
+            $html .= '<input type="hidden" name="distri['.$i.'][numnin]" value="'.$numnin.'">';
+
+            // edanin es opcional, solo si recibiste ages[] en la búsqueda
+            $k = 0;
+            foreach ($ages as $age) {
+                if ($age === '' || $age === null) continue;
+                $html .= '<input type="hidden" name="distri['.$i.'][edanin]['.$k.']" value="'.(int)$age.'">';
+                $k++;
+            }
+
+            $i++;
+        }
+        return $html;
+    };
+@endphp
 
 
 
@@ -982,32 +1016,64 @@
 
                                         <div class="room-right">
                                             <div class="room-price">{{ number_format($price, 2) }} {{ $hotel['currency'] ?? 'EUR' }}</div>
-                                            <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
-                                                <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
-                                                <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
-                                                <input type="hidden" name="currency" value="{{ $hotel['currency'] ?? 'EUR' }}">
-                                                <input type="hidden" name="start_date" value="{{ request('fecini') }}">
-                                                <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
-                                                <input type="hidden" name="room_type" value="{{ $roomDesc }}">
-                                                <input type="hidden" name="board" value="{{ $boardDesc }}">
-                                                <input type="hidden" name="provider" value="{{ $codtou }}">
-                                                <input type="hidden" name="price_per_night" value="{{ $price }}">
-                                                <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] ?? '' }}">
-                                                <input type="hidden" name="room_internal_id" value="{{ $r['room_internal_id'] ?? '' }}">
-                                                @if (request()->has('rooms'))
-                                                @foreach ((array) request('rooms') as $ri => $rr)
-                                                <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($rr['adl'] ?? 1) }}">
-                                                <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($rr['chd'] ?? 0) }}">
-                                                @foreach ((array)($rr['ages'] ?? []) as $ai => $age)
-                                                <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
-                                                @endforeach
-                                                @endforeach
-                                                @endif
-                                                <button type="submit" class="btn-sel select-btn">
-                                                    <span class="spinner" aria-hidden="true"></span>
-                                                    <span class="label">Seleccionar</span>
-                                                </button>
-                                            </form>
+                                           <form method="GET" action="{{ route('availability.lock.form') }}" class="inline">
+    <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
+    <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
+    <input type="hidden" name="currency" value="{{ $hotel['currency'] ?? 'EUR' }}">
+    <input type="hidden" name="start_date" value="{{ request('fecini') }}">
+    <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+    <input type="hidden" name="room_type" value="{{ $roomDesc }}">
+    <input type="hidden" name="board" value="{{ $boardDesc }}">
+    <input type="hidden" name="provider" value="{{ $codtou }}">
+    <input type="hidden" name="price_per_night" value="{{ $price }}">
+    <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] ?? '' }}">
+    <input type="hidden" name="room_internal_id" value="{{ $r['room_internal_id'] ?? '' }}">
+
+    {{-- === distri[1] también para simple === --}}
+    @php
+        // 1) Si vienes de multi, usa la 1ª ocupación del array rooms/effective
+        $roomsEffLocal = is_array($rooms ?? null)
+            ? $rooms
+            : (is_array($effective['rooms'] ?? null) ? $effective['rooms'] : []);
+
+        $occ1 = $roomsEffLocal[0] ?? null;
+
+        // 2) Fallback para formularios antiguos (top-level)
+        if (!$occ1) {
+            $occ1 = [
+                'adl'  => (int) (request('numadl') ?? request('adl') ?? request('adults') ?? 2),
+                'chd'  => (int) (request('numnin') ?? request('numchd') ?? request('chd') ?? request('children') ?? 0),
+                'ages' => (array) request()->input('ages', request()->input('edades', [])),
+            ];
+        }
+
+        $adl1 = (int) ($occ1['adl'] ?? 2);
+        $chd1 = (int) ($occ1['chd'] ?? 0);
+        $ages1 = array_values(array_filter((array)($occ1['ages'] ?? []), fn($a) => $a !== '' && $a !== null));
+    @endphp
+
+    <input type="hidden" name="distri[1][numadl]" value="{{ $adl1 }}">
+    <input type="hidden" name="distri[1][numnin]" value="{{ $chd1 }}">
+    @foreach ($ages1 as $j => $age)
+        <input type="hidden" name="distri[1][edanin][{{ $j }}]" value="{{ (int)$age }}">
+    @endforeach
+    {{-- (opcional) conserva rooms[...] si lo usas en otros sitios --}}
+    @if (request()->has('rooms'))
+        @foreach ((array) request('rooms') as $ri => $rr)
+            <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($rr['adl'] ?? 1) }}">
+            <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($rr['chd'] ?? 0) }}">
+            @foreach ((array)($rr['ages'] ?? []) as $ai => $age)
+                <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
+            @endforeach
+        @endforeach
+    @endif
+
+    <button type="submit" class="btn-sel select-btn">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="label">Seleccionar</span>
+    </button>
+</form>
+
                                         </div>
                                     </li>
                                     @empty
@@ -1080,35 +1146,45 @@
                                                             </div>
 
                                                             <form method="GET" action="{{ route('availability.lock.form') }}" class="w-full md:w-auto">
-                                                                <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
-                                                                <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
-                                                                <input type="hidden" name="currency" value="{{ $hotel['currency'] ?? 'EUR' }}">
-                                                                <input type="hidden" name="start_date" value="{{ request('fecini') }}">
-                                                                <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
-                                                                <input type="hidden" name="room_type" value="{{ $pack['desc'] }}">
-                                                                <input type="hidden" name="board" value="{{ $pack['board'] }}">
-                                                                <input type="hidden" name="provider" value="{{ $prov }}">
-                                                                <input type="hidden" name="price_total" value="{{ $pack['total'] }}">
-                                                                <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] ?? '' }}">
-                                                                @foreach ($pack['refs'] as $i => $rr)
-                                                                <input type="hidden" name="pack[{{ $i }}][room_internal_id]" value="{{ $rr['room_internal_id'] ?? '' }}">
-                                                                <input type="hidden" name="pack[{{ $i }}][refdis]" value="{{ $rr['refdis'] ?? '' }}">
-                                                                <input type="hidden" name="pack[{{ $i }}][price_per_night]" value="{{ (float)($rr['price_per_night'] ?? 0) }}">
-                                                                @endforeach
-                                                                @if (request()->has('rooms'))
-                                                                @foreach ((array) request('rooms') as $ri => $rr)
-                                                                <input type="hidden" name="rooms[{{ $ri }}][adl]" value="{{ (int)($rr['adl'] ?? 1) }}">
-                                                                <input type="hidden" name="rooms[{{ $ri }}][chd]" value="{{ (int)($rr['chd'] ?? 0) }}">
-                                                                @foreach ((array)($rr['ages'] ?? []) as $ai => $age)
-                                                                <input type="hidden" name="rooms[{{ $ri }}][ages][{{ $ai }}]" value="{{ (int)$age }}">
-                                                                @endforeach
-                                                                @endforeach
-                                                                @endif
-                                                                <button type="submit" class="btn-sel select-btn">
-                                                                    <span class="spinner" aria-hidden="true"></span>
-                                                                    <span class="label">Seleccionar pack</span>
-                                                                </button>
-                                                            </form>
+    <input type="hidden" name="hotel_name" value="{{ $hotel['name'] }}">
+    <input type="hidden" name="hotel_code" value="{{ $hotel['code'] }}">
+    <input type="hidden" name="currency" value="{{ $hotel['currency'] ?? 'EUR' }}">
+    <input type="hidden" name="start_date" value="{{ request('fecini') }}">
+    <input type="hidden" name="end_date" value="{{ request('fecfin') }}">
+    <input type="hidden" name="room_type" value="{{ $pack['desc'] }}">
+    <input type="hidden" name="board" value="{{ $pack['board'] }}">
+    <input type="hidden" name="provider" value="{{ $prov }}">
+    <input type="hidden" name="price_total" value="{{ $pack['total'] }}">
+    <input type="hidden" name="hotel_internal_id" value="{{ $hotel['hotel_internal_id'] ?? '' }}">
+
+    {{-- refs del pack --}}
+    @foreach ($pack['refs'] as $i => $rr)
+        <input type="hidden" name="pack[{{ $i }}][room_internal_id]" value="{{ $rr['room_internal_id'] ?? '' }}">
+        <input type="hidden" name="pack[{{ $i }}][refdis]" value="{{ $rr['refdis'] ?? '' }}">
+        <input type="hidden" name="pack[{{ $i }}][price_per_night]" value="{{ (float)($rr['price_per_night'] ?? 0) }}">
+    @endforeach
+
+    {{-- Ocupación por habitación hacia el lock --}}
+    @php
+      $roomsEffLocal = is_array($rooms ?? null)
+          ? $rooms
+          : (is_array($effective['rooms'] ?? null) ? $effective['rooms'] : []);
+    @endphp
+    @foreach ($roomsEffLocal as $i => $occ)
+        <input type="hidden" name="distri[{{ $i+1 }}][numadl]" value="{{ (int)($occ['adl'] ?? 2) }}">
+        <input type="hidden" name="distri[{{ $i+1 }}][numnin]" value="{{ (int)($occ['chd'] ?? 0) }}">
+        @if(!empty($occ['ages']) && is_array($occ['ages']))
+            @foreach ($occ['ages'] as $j => $age)
+                <input type="hidden" name="distri[{{ $i+1 }}][edanin][{{ $j }}]" value="{{ (int)$age }}">
+            @endforeach
+        @endif
+    @endforeach
+
+    <button type="submit" class="btn-sel select-btn">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="label">Seleccionar pack</span>
+    </button>
+</form>
                                                         </div>
                                                     </div>
 
