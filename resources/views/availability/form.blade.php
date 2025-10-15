@@ -126,6 +126,16 @@
                       <input type="number" min="1" max="4" name="rooms[__i__][adl]" value="2"
                         class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 adl-input" required />
                     </div>
+                    
+                    <div>
+                      <label class="block text-sm font-medium text-slate-700">Edades de los adultos</label>
+                      <div class="adult-ages-wrap grid grid-cols-3 gap-2">
+                        <!-- aquí se pintan los inputs según nº de adultos -->
+                      </div>
+                      
+                      <p class="mt-1 text-xs text-slate-500">Opcional. Si las indicas, se usarán para calcular FECNAC en el bloqueo.</p>
+                    </div>
+                    </br>
                     <div>
                       <label class="block text-sm font-medium text-slate-700">Niños</label>
                       <input type="number" min="0" max="3" name="rooms[__i__][chd]" value="0"
@@ -510,7 +520,8 @@
       function syncCapacity(row) {
         const adl = row.querySelector('.adl-input');
         const chd = row.querySelector('.chd-input');
-        const agesWrap = row.querySelector('.ages-wrap');
+        const agesWrap = row.querySelector('.ages-wrap'); // niños
+        const adultAgesWrap = row.querySelector('.adult-ages-wrap'); // adultos
 
         const a = parseInt(adl.value || '0', 10);
         const c = parseInt(chd.value || '0', 10);
@@ -526,12 +537,12 @@
           chd.setCustomValidity('');
         }
 
-        // Generar inputs de edades = nº de niños
-        const current = agesWrap.querySelectorAll('input[type="number"]').length;
-        const target = Math.max(0, Math.min(3, c));
-        if (current !== target) {
+        // ===== Niños: generar inputs = nº de niños =====
+        const currentKids = agesWrap.querySelectorAll('input[type="number"]').length;
+        const targetKids = Math.max(0, Math.min(3, c));
+        if (currentKids !== targetKids) {
           agesWrap.innerHTML = '';
-          for (let i = 0; i < target; i++) {
+          for (let i = 0; i < targetKids; i++) {
             const input = document.createElement('input');
             input.type = 'number';
             input.min = '0';
@@ -543,7 +554,25 @@
             agesWrap.appendChild(input);
           }
         }
+
+        // ===== Adultos: generar inputs = nº de adultos =====
+        const currentAdults = adultAgesWrap.querySelectorAll('input[type="number"]').length;
+        const targetAdults = Math.max(1, Math.min(4, a));
+        if (currentAdults !== targetAdults) {
+          adultAgesWrap.innerHTML = '';
+          for (let i = 0; i < targetAdults; i++) {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '12';
+            input.max = '120';
+            input.placeholder = 'Edad';
+            input.name = `rooms[${row.dataset.idx}][adult_ages][${i}]`;
+            input.className = 'rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 w-full';
+            adultAgesWrap.appendChild(input);
+          }
+        }
       }
+
 
       function addRoom(defaults = {
         adl: 2,

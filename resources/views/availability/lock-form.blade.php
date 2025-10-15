@@ -22,56 +22,40 @@
         @endif
 
         @php
-            // 1) Cargar el payload de la habitación/selección.
-            // ⚠️ Prioriza SIEMPRE el $data que manda el controlador (incluye 'distri'),
-            // y usa session('form_data') solo para completar lo que falte.
+            // 1) Cargar payload de la selección priorizando $data del controller
             $incomingData = [];
-
             if (isset($data) && is_iterable($data)) {
                 $incomingData = collect($data)->toArray();
             }
-
-            // Mezcla no destructiva: lo que venga en $data pisa lo anterior de sesión.
             $incomingData = array_replace_recursive(
                 (array) session('form_data', []),
                 (array) $incomingData
             );
 
-            // 2) Localizador flasheado por el controller después del bloqueo
             $locata = session('locata');
-
-            // Helper para imprimir seguro
             $s = fn ($v) => e((string) ($v ?? ''));
-
-            // Claves a excluir al reinyectar como hidden
             $deny = ['_token', '_method'];
 
-            /**
-             * Imprime inputs hidden soportando arrays anidados (pack, distri, etc.)
-             */
             function renderHiddenInputs(string $name, $value): void {
                 if (is_array($value)) {
                     foreach ($value as $k => $v) {
-                        $newName = is_int($k) ? "{$name}[{$k}]" : "{$name}[{$k}]";
+                        $newName = "{$name}[{$k}]";
                         renderHiddenInputs($newName, $v);
                     }
                 } else {
-                    echo '<input type="hidden" name="' . e($name) . '" value="' . e((string) $value) . '">';
+                    echo '<input type="hidden" name="' . e($name) . '" value="' . e((string)$value) . '">';
                 }
             }
 
-            // --- Derivados que usas más abajo ---
+            // --- Derivados ---
             $pack   = $incomingData['pack'] ?? [];
             $distri = $incomingData['distri'] ?? [];
 
-            // Normaliza las distribuciones por habitación en base a 'pack' y 'distri'
-            // IMPORTANTE: los formularios envían distri con índice 1..N
-            // Aquí lo normalizamos a 0..N-1 para pintar la UI.
+            // Normaliza distri 1..N -> 0..N-1 para mostrar UI
             $roomDistributions = [];
-
             if (is_array($pack) && count($pack) > 0) {
                 foreach ($pack as $idx => $_room) {
-                    $k1 = $idx + 1; // distri viene 1-based
+                    $k1 = $idx + 1;
                     $roomDistributions[$idx] = [
                         'numadl' => (int) ($distri[$k1]['numadl'] ?? 2),
                         'numnin' => (int) ($distri[$k1]['numnin'] ?? 0),
@@ -81,7 +65,6 @@
                     ];
                 }
             } else {
-                // Caso habitación simple: construimos desde distri directamente (1..N => 0..N-1)
                 if (!empty($distri) && is_array($distri)) {
                     $i = 0;
                     foreach ($distri as $unused => $v) {
@@ -96,6 +79,9 @@
 
             $hasPack   = isset($incomingData['pack']) && is_array($incomingData['pack']) && count($incomingData['pack']) > 0;
             $hasDistri = !empty($distri) && is_array($distri);
+
+            // Edad por defecto para adultos (para visualizar y para el cálculo en el server si faltan birthdates)
+            $ADULT_DEFAULT_YEARS = (int) (config('itravex.adult_default_years', 30));
         @endphp
 
         <div class="container mx-auto px-4 py-6 bg-white rounded-lg shadow">
@@ -167,7 +153,7 @@
                             @endif
                         @endif
 
-                        {{-- Reinyecta TODO el payload original como hidden inputs --}}
+                        {{-- Reinyecta TODO el payload original (incluye distri/pack/rooms/etc.) --}}
                         @foreach ($incomingData as $key => $value)
                             @continue(in_array($key, $deny, true))
                             @php renderHiddenInputs($key, $value); @endphp
@@ -179,61 +165,40 @@
                     @endif
                 </div>
 
-                {{-- 👶 Fechas de nacimiento por habitación (adultos/niños) --}}
+                {{-- 👥 Resumen de edades por habitación (sin pedir fechas) --}}
                 @if (!empty($incomingData) && ($hasPack || $hasDistri) && !empty($roomDistributions))
                     <div class="mb-6">
-                        <h3 class="text-lg font-semibold text-gray-700">Fechas de nacimiento por Habitación</h3>
+                        <h3 class="text-lg font-semibold text-gray-700">Ocupación y Edades</h3>
                         <p class="text-sm text-gray-600 mb-3">
-                            Introduce la <strong>fecha de nacimiento</strong> de cada ocupante (adultos y niños) por habitación.
+                            Estas edades se usarán para calcular las fechas de nacimiento automáticamente al bloquear.
                         </p>
 
                         @foreach ($roomDistributions as $idx => $dist)
                             @php
                                 $numAdl = max(0, (int) ($dist['numadl'] ?? 2));
                                 $numNin = max(0, (int) ($dist['numnin'] ?? 0));
+                                $ninAges = array_values(array_filter($dist['edanin'] ?? [], fn($x) => $x !== '' && $x !== null));
                             @endphp
 
                             <div class="mb-4 border rounded p-4 bg-gray-50">
                                 <div class="flex items-center justify-between">
                                     <div class="font-medium">Habitación {{ $idx + 1 }}</div>
                                     <div class="text-sm text-gray-600">
-                                        Adultos: {{ $numAdl }} @if ($numNin > 0) · Niños: {{ $numNin }} @endif
+                                        Adultos: {{ $numAdl }} (edad asumida {{ $ADULT_DEFAULT_YEARS }} años)
+                                        @if ($numNin > 0)
+                                            · Niños: {{ $numNin }}
+                                        @endif
                                     </div>
                                 </div>
 
-                                {{-- Adultos --}}
-                                @if ($numAdl > 0)
-                                    <div class="mt-3">
-                                        <label class="block font-medium text-sm text-gray-700 mb-1">Fechas de nacimiento de adultos</label>
-                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                            @for ($a = 0; $a < $numAdl; $a++)
-                                                <input
-                                                    type="date"
-                                                    name="birthdates[{{ $idx }}][adults][]"
-                                                    required
-                                                    class="w-full border rounded px-3 py-2"
-                                                    placeholder="dd/mm/aaaa">
-                                            @endfor
-                                        </div>
-                                        <p class="text-xs text-gray-500 mt-1">Adultos ≥ 12 años.</p>
-                                    </div>
-                                @endif
-
-                                {{-- Niños --}}
                                 @if ($numNin > 0)
-                                    <div class="mt-4">
-                                        <label class="block font-medium text-sm text-gray-700 mb-1">Fechas de nacimiento de niños</label>
-                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                            @for ($k = 0; $k < $numNin; $k++)
-                                                <input
-                                                    type="date"
-                                                    name="birthdates[{{ $idx }}][children][]"
-                                                    required
-                                                    class="w-full border rounded px-3 py-2"
-                                                    placeholder="dd/mm/aaaa">
-                                            @endfor
-                                        </div>
-                                        <p class="text-xs text-gray-500 mt-1">La edad del niño se calculará automáticamente según la fecha de entrada.</p>
+                                    <div class="mt-2 text-sm text-gray-700">
+                                        <span class="font-medium">Edades niños:</span>
+                                        @if (!empty($ninAges))
+                                            {{ implode(', ', array_map(fn($a) => (int)$a . ' años', $ninAges)) }}
+                                        @else
+                                            (no informadas)
+                                        @endif
                                     </div>
                                 @endif
                             </div>

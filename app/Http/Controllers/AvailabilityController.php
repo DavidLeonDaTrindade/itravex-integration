@@ -1060,12 +1060,10 @@ XML;
     {
         Log::channel('itravex')->info("⚠️ Entrando a submitLock (soporte multi-habitación)");
 
-        // 🔹 Validación: admite pack o habitación única
+        // 🔹 Validación (birthdates ahora es opcional; distri soportado)
         $data = $request->validate([
             'hotel_code'        => 'required|string',
-            'birthdates'        => 'required|array',
-            'birthdates.*'      => 'required|date',
-            'codzge'            => 'required|string',
+            'codzge'            => 'nullable|string',
             'start_date'        => 'required|date',
             'end_date'          => 'required|date',
             'hotel_name'        => 'required|string',
@@ -1073,29 +1071,170 @@ XML;
             'currency'          => 'required|string',
             'hotel_internal_id' => 'required|string',
 
+            // birthdates anidado por habitación/adults/children (OPCIONAL)
+            'birthdates'                 => 'nullable|array',
+            'birthdates.*'               => 'array',
+            'birthdates.*.adults'        => 'nullable|array',
+            'birthdates.*.adults.*'      => 'nullable|date',
+            'birthdates.*.children'      => 'nullable|array',
+            'birthdates.*.children.*'    => 'nullable|date',
+
             // Soporte multi-habitación
             'pack'                          => 'nullable|array|min:1',
             'pack.*.room_internal_id'       => 'required_with:pack|string',
             'pack.*.price_per_night'        => 'required_with:pack|numeric',
             'pack.*.refdis'                 => 'nullable|string',
 
-            // Compatibilidad con habitación única
+            // Compat habitación única
             'room_internal_id'              => 'nullable|string',
             'price_per_night'               => 'nullable',
+
+            // 🔹 Para cálculo automático si no vienen birthdates
+            'distri'                        => 'nullable|array',
+            'distri.*.numadl'               => 'nullable|integer|min:0',
+            'distri.*.numnin'               => 'nullable|integer|min:0',
+            'distri.*.edanin'               => 'nullable|array', // edades niños
+            'distri.*.edanin.*'             => 'nullable|integer|min:0',
         ]);
 
-        // 🔹 Normalizamos las habitaciones (una o varias)
+        $entryDate = new \DateTime($data['start_date']); // referencia para calcular FECNAC
+        $ADULT_DEFAULT_YEARS = (int) (config('itravex.adult_default_years', 30)); // configurable
+
+        // ✅ birthdatesByRoom: siempre lo tendremos (llegue del form o lo derivamos)
+        $birthdatesByRoom = [];
+
+        if (!empty($data['birthdates'])) {
+            // Normaliza a 0-based
+            $birthdatesByRoom = array_values($data['birthdates']);
+        } else {
+            // ⚙️ Derivar de distri: por cada habitación
+            $distri = $data['distri'] ?? [];
+            if (empty($distri)) {
+                return back()->withErrors(['No se recibieron ni fechas de nacimiento ni distribución para calcularlas.']);
+            }
+
+            // distri viene 1..N ⇒ normalizamos a 0..N-1
+            $normalized = [];
+            foreach ($distri as $i1 => $v) {
+                $normalized[] = [
+                    'numadl' => (int)($v['numadl'] ?? 0),
+                    'numnin' => (int)($v['numnin'] ?? 0),
+                    'edanin' => isset($v['edanin']) && is_array($v['edanin']) ? array_values($v['edanin']) : [],
+                ];
+            }
+
+            // helper: fecha Y-m-d a partir de "edad" en años (aprox — restamos 6 meses para evitar límites)
+            $dobFromAge = function (\DateTime $ref, int $years) {
+                $dt = (clone $ref);
+                $dt->modify("-{$years} years")->modify('-6 months');
+                return $dt->format('Y-m-d');
+            };
+
+            foreach ($normalized as $zeroIdx => $room) {
+                $numAdl = max(0, (int)$room['numadl']);
+                $numNin = max(0, (int)$room['numnin']);
+                $kidAges = array_values(array_filter($room['edanin'] ?? [], fn($x) => $x !== '' && $x !== null));
+
+                // ⬇️ NUEVO: intentar leer edades de adultos desde rooms[zeroIdx][adult_ages][]
+                $adultAgesFromRooms = (array) $request->input("rooms.$zeroIdx.adult_ages", []);
+
+                $adults = [];
+                for ($i = 0; $i < $numAdl; $i++) {
+                    if (isset($adultAgesFromRooms[$i]) && $adultAgesFromRooms[$i] !== '') {
+                        $age = (int) $adultAgesFromRooms[$i];
+                    } else {
+                        $age = $ADULT_DEFAULT_YEARS; // fallback configurable
+                    }
+                    $adults[] = $dobFromAge($entryDate, max(12, $age));
+                }
+
+                $children = [];
+                for ($i = 0; $i < $numNin; $i++) {
+                    $age = isset($kidAges[$i]) ? (int)$kidAges[$i] : 7;
+                    $children[] = $dobFromAge($entryDate, max(0, $age));
+                }
+
+                $birthdatesByRoom[] = [
+                    'adults'   => $adults,
+                    'children' => $children,
+                ];
+            }
+        }
+
+        // 🔹 Aplanar fechas (adults + children) conservando el orden por habitación
+        $flatBirthdates = [];
+        foreach ($birthdatesByRoom as $roomIndex => $sets) {
+            foreach (['adults', 'children'] as $group) {
+                if (!empty($sets[$group]) && is_array($sets[$group])) {
+                    foreach ($sets[$group] as $d) {
+                        if ($d !== null && $d !== '') {
+                            $flatBirthdates[] = $d; // YYYY-MM-DD (o lo que venga)
+                        }
+                    }
+                }
+            }
+        }
+        // Compat plano
+        if (empty($flatBirthdates) && !empty($data['birthdates']) && is_array($data['birthdates'])) {
+            foreach ($data['birthdates'] as $maybeDate) {
+                if (!is_array($maybeDate) && $maybeDate !== '') {
+                    $flatBirthdates[] = $maybeDate;
+                }
+            }
+        }
+        if (empty($flatBirthdates)) {
+            return back()->withErrors(['No se pudieron construir fechas de nacimiento.']);
+        }
+
+        // 🔹 Helper fecha → dd/mm/YYYY
+        $toDmy = function ($value) {
+            if (is_array($value)) {
+                foreach ($value as $v) {
+                    if (!is_array($v)) {
+                        $value = $v;
+                        break;
+                    }
+                }
+            }
+            $value = trim((string)$value);
+            if ($value === '') return null;
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                $dt = \DateTime::createFromFormat('Y-m-d', $value);
+                return $dt ? $dt->format('d/m/Y') : null;
+            }
+            if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $value)) {
+                return $value; // ya dd/mm/YYYY
+            }
+            $ts = strtotime($value);
+            return $ts ? date('d/m/Y', $ts) : null;
+        };
+
+        // 🔹 Construir <pasage> con <FECNAC>
+        $pasageXml = '';
+        $globalIndex = 1;
+        foreach ($flatBirthdates as $rawDate) {
+            $dmy = $toDmy($rawDate);
+            if ($dmy === null) {
+                Log::channel('itravex')->warning('Fecha de nacimiento inválida/no parseable', ['raw' => $rawDate]);
+                return back()->withErrors(['Alguna fecha de nacimiento no es válida.']);
+            }
+            $pasageXml .= "<adl id=\"{$globalIndex}\"><FECNAC>{$dmy}</FECNAC></adl>";
+            $globalIndex++;
+        }
+
+        // 🔹 Normalizar habitaciones (pack o individual)
         $rooms = [];
         if (!empty($data['pack'])) {
-            foreach ($data['pack'] as $r) {
-                $rooms[] = [
+            foreach (array_values($data['pack']) as $idx => $r) {
+                $rooms[$idx] = [
                     'room_internal_id' => (string)($r['room_internal_id'] ?? ''),
                     'price_per_night'  => $r['price_per_night'] ?? null,
                     'refdis'           => $r['refdis'] ?? null,
                 ];
             }
         } elseif (!empty($data['room_internal_id'])) {
-            $rooms[] = [
+            $rooms[0] = [
                 'room_internal_id' => (string)$data['room_internal_id'],
                 'price_per_night'  => $data['price_per_night'] ?? null,
                 'refdis'           => $data['refdis'] ?? null,
@@ -1104,7 +1243,22 @@ XML;
             return back()->withErrors(['No se recibió ninguna habitación válida (ni pack ni individual).']);
         }
 
-        // 🔹 Config del proveedor
+        // 🔹 Asignar PASAJEROS por habitación según birthdatesByRoom (0-based)
+        $roomPasids = [];
+        $cursor = 1;
+        foreach ($birthdatesByRoom as $roomIndex => $sets) {
+            $countAdults = !empty($sets['adults'])   ? count($sets['adults'])   : 0;
+            $countKids   = !empty($sets['children']) ? count($sets['children']) : 0;
+            $n = $countAdults + $countKids;
+
+            $ids = [];
+            for ($j = 0; $j < $n; $j++) {
+                $ids[] = $cursor++;
+            }
+            $roomPasids[$roomIndex] = $ids;
+        }
+
+        // 🔹 Config proveedor
         $cfg = session('provider_cfg') ?? $this->getProviderConfig($request);
         if (empty($cfg['endpoint'])) {
             return back()->withErrors(['Endpoint no configurado (provider_cfg.endpoint está vacío).']);
@@ -1120,69 +1274,58 @@ XML;
             session(['ideses' => $sessionId, 'ideses_created_at' => now()]);
         }
 
-        // 🔹 Pasajeros (formato dd/mm/YYYY)
-        $adlXml = '';
-        $pasidXml = '';
-        foreach ($data['birthdates'] as $i => $birthdate) {
-            $id = $i + 1;
-            $adlXml  .= "<adl id=\"{$id}\"><fecnac>" . date('d/m/Y', strtotime($birthdate)) . "</fecnac></adl>";
-            $pasidXml .= "<pasid>{$id}</pasid>";
-        }
-
         // 🔹 IDs padre
         $bloserId = (string) $data['hotel_internal_id'];
 
-        // 🔹 Generar varios <dissmo> si hay múltiples habitaciones
-        $dissmoXml = '';
-        foreach ($rooms as $r) {
+        // 🔹 Generar <dissmo> por habitación con sus pasid
+        $bloserXml = '';
+        foreach ($rooms as $idx => $r) {
             $dissmoId = $r['room_internal_id'];
-            $dissmoXml .= <<<XML
-    <dissmo id="{$dissmoId}">
-      <numuni>1</numuni>
-      {$pasidXml}
-    </dissmo>
-    XML;
+            $ids = $roomPasids[$idx] ?? [];
+            $pasidsXml = '';
+            foreach ($ids as $pid) {
+                $pasidsXml .= "<pasid>{$pid}</pasid>";
+            }
+
+            $bloserXml .= "<bloser id=\"{$bloserId}\"><dissmo id=\"{$dissmoId}\"><numuni>1</numuni>{$pasidsXml}</dissmo></bloser>";
         }
 
-        // 🔹 Construcción del XML final
+        // 🔹 XML final
         $xml = <<<XML
 <BloqueoServicioPeticion>
   <ideses>{$sessionId}</ideses>
   <codtou>{$cfg['codtou']}</codtou>
   <tipcon>V</tipcon>
-  <pasage>{$adlXml}</pasage>
-  <bloser id="{$bloserId}">
-    {$dissmoXml}
-  </bloser>
+  <pasage>{$pasageXml}</pasage>
+  {$bloserXml}
   <accion>A</accion>
 </BloqueoServicioPeticion>
 XML;
 
         Log::channel('itravex')->debug("🔵 XML de petición BloqueoServicio:\n" . $xml);
 
-        // 🔹 Envío al proveedor
-        $response = Http::withHeaders([
+        // 🔹 Envío
+        $http = Http::withHeaders([
             'Accept-Encoding' => 'gzip',
             'Content-Type'    => 'application/xml',
-        ])->timeout(30)->withBody($xml, 'application/xml')
-            ->post($cfg['endpoint']);
+        ])->timeout(30)->withBody($xml, 'application/xml');
+
+        $response = $http->post($cfg['endpoint']);
 
         if (!$response->successful()) {
-            Log::channel('itravex')->error("❌ HTTP fallo en BloqueoServicio", ['status' => $response->status()]);
+            Log::channel('itravex')->error("❌ HTTP fallo en BloqueoServicio", ['status' => $response->status(), 'body' => $response->body()]);
             return back()->withErrors(['Error de conexión con el proveedor']);
         }
 
         $raw = $response->body();
         Log::channel('itravex')->info("🟢 Respuesta BloqueoServicio RAW:\n" . $raw);
 
-        // 🔹 Parseo XML
         $xmlResponse = @simplexml_load_string($raw);
         if ($xmlResponse === false) {
             Log::channel('itravex')->error("❌ No se pudo parsear XML de BloqueoServicio");
             return back()->withErrors(['Respuesta inválida del proveedor']);
         }
 
-        // 🔹 Errores del proveedor
         $tiperr = trim((string)($xmlResponse->tiperr ?? ''));
         $txterr = trim((string)($xmlResponse->txterr ?? ''));
         $coderr = trim((string)($xmlResponse->coderr ?? ''));
@@ -1202,10 +1345,8 @@ XML;
             if (!empty($nodes) && isset($nodes[0])) {
                 $locata = trim((string)$nodes[0]);
             }
-        } catch (\Throwable $e) {
-            // no-op
+        } catch (\Throwable $e) { /* no-op */
         }
-
         if (!$locata && isset($xmlResponse->resser->locata)) {
             $locata = (string)$xmlResponse->resser->locata;
         } elseif (!$locata && isset($xmlResponse->resser->estsmo->locata)) {
@@ -1213,11 +1354,9 @@ XML;
         } elseif (!$locata && isset($xmlResponse->locata)) {
             $locata = (string)$xmlResponse->locata;
         }
-
         if (!$locata && preg_match('/<locata>\s*([^<]+)\s*<\/locata>/i', $raw, $m)) {
             $locata = trim($m[1]);
         }
-
         if (!$locata) {
             Log::channel('itravex')->warning("⚠️ Bloqueo sin <locata> y sin errores formales.", [
                 'sent_bloser_id' => $bloserId,
@@ -1239,6 +1378,9 @@ XML;
             ->route('availability.lock.form')
             ->with('success', 'Bloqueo realizado correctamente.');
     }
+
+
+
 
 
 

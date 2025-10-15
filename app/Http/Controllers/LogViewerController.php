@@ -3,81 +3,142 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 class LogViewerController extends Controller
 {
     /**
-     * Muestra las últimas N líneas del log de Itravex,
-     * con filtro por texto o por locata.
+     * Visor de logs (canal itravex) con selector de archivo.
+     * GET /logs/itravex?file=itravex-2025-10-15.log&lines=400&locata=ABC123&q=...
      */
     public function itravey(Request $request)
     {
-        $q       = trim((string) $request->input('q', ''));         // búsqueda libre
-        $locata  = trim((string) $request->input('locata', ''));    // filtro locata exacto
-        $lines   = (int) $request->input('lines', 400);             // cuántas líneas leer
+        $q       = trim((string) $request->input('q', ''));          // búsqueda libre (contiene)
+        $locata  = trim((string) $request->input('locata', ''));     // filtro por locata
+        $lines   = (int) $request->input('lines', 400);              // últimas N líneas
+        $lines   = in_array($lines, [200,400,800,1200,2000]) ? $lines : 400;
         $channel = 'itravex';
 
-        // Encuentra el último archivo del canal (si es daily = itrave x-YYYY-MM-DD.log)
-        $latestPath = $this->latestChannelPath($channel);
-        if (!$latestPath || !is_readable($latestPath)) {
-            return view('logs.itravex', [
-                'hasFile' => false,
-                'file' => $latestPath,
-                'entries' => [],
-                'q' => $q,
-                'locata' => $locata,
-                'lines' => $lines,
-            ]);
+        // 1) Listar archivos disponibles del canal
+        [$allFiles, $pattern] = $this->listLogFiles($channel);       // nombres: itravex-YYYY-MM-DD.log (orden desc)
+
+        // 2) Resolver archivo seleccionado (query ?file=)
+        $requested = (string) $request->input('file', '');
+        [$selected, $selectedPath] = $this->resolveSelectedFile($requested, $allFiles, $pattern, $channel);
+
+        $hasFile = $selectedPath && is_readable($selectedPath);
+
+        // 3) Tail y filtros
+        $entries = [];
+        if ($hasFile) {
+            $rawTail = $this->tailFile($selectedPath, $lines); // string con \n
+            $entries = array_values(array_filter(explode("\n", $rawTail), function ($ln) use ($q, $locata) {
+                if ($locata !== '' && !Str::contains($ln, $locata)) {
+                    return false;
+                }
+                if ($q !== '') {
+                    return Str::contains(Str::lower($ln), Str::lower($q));
+                }
+                return true;
+            }));
         }
 
-        // Tail eficiente de las últimas N líneas
-        $raw = $this->tailFile($latestPath, $lines);
-
-        // Filtrado (si hay búsqueda o locata)
-        $entries = array_values(array_filter(explode("\n", $raw), function ($ln) use ($q, $locata) {
-            if ($locata !== '') {
-                // Buscar locata como palabra completa o en JSON de contexto
-                if (!Str::contains($ln, $locata)) return false;
-            }
-            if ($q !== '') {
-                return Str::contains(Str::lower($ln), Str::lower($q));
-            }
-            return true;
-        }));
-
         return view('logs.itravex', [
-            'hasFile'  => true,
-            'file'     => $latestPath,
+            'hasFile'  => $hasFile,
+            'file'     => $selectedPath, // ruta completa mostrada bajo el cuadro
             'entries'  => $entries,
             'q'        => $q,
             'locata'   => $locata,
             'lines'    => $lines,
+            'allFiles' => $allFiles,     // <- para el <select>
+            'selected' => $selected,     // <- nombre seleccionado (no ruta)
         ]);
     }
 
     /**
-     * Descarga del archivo de log actual.
+     * Descarga del archivo de log elegido.
+     * GET /logs/itravex/download?file=itravex-2025-10-15.log
      */
-    public function download()
+    public function download(Request $request)
     {
-        $path = $this->latestChannelPath('itravex');
-        abort_unless($path && is_readable($path), 404, 'Archivo de log no disponible');
-        return response()->download($path, basename($path));
+        $channel = 'itravex';
+        [$allFiles, $pattern] = $this->listLogFiles($channel);
+
+        $requested = (string) $request->input('file', '');
+        [$selected, $selectedPath] = $this->resolveSelectedFile($requested, $allFiles, $pattern, $channel);
+        abort_unless($selectedPath && is_readable($selectedPath), 404, 'Archivo de log no disponible');
+
+        return response()->download($selectedPath, $selected);
     }
 
     /**
-     * Busca el último archivo del canal (daily o single).
+     * Devuelve [listaDeArchivosOrdenadaDesc, regexPattern].
+     */
+    private function listLogFiles(string $channel): array
+    {
+        $logDir  = storage_path('logs');
+        $pattern = '/^' . preg_quote($channel, '/') . '-\d{4}-\d{2}-\d{2}\.log$/';
+
+        $allFiles = collect(File::files($logDir))
+            ->map(fn($f) => $f->getFilename())
+            ->filter(fn($name) => preg_match($pattern, $name))
+            ->sortDesc()
+            ->values()
+            ->all();
+
+        // Si no hay daily, ofrecer el single (canal.log) si existe
+        $single = "{$channel}.log";
+        if (empty($allFiles) && File::exists($logDir . DIRECTORY_SEPARATOR . $single)) {
+            $allFiles = [$single];
+            // patrón que también acepte el single
+            $pattern = '/^(' . preg_quote($channel, '/') . '\.log|' . preg_quote($channel, '/') . '-\d{4}-\d{2}-\d{2}\.log)$/';
+        }
+
+        return [$allFiles, $pattern];
+    }
+
+    /**
+     * Valida y resuelve el archivo seleccionado. Devuelve [nombre, ruta].
+     * Si no es válido o no existe, elige el más reciente disponible, o null.
+     */
+    private function resolveSelectedFile(string $requested, array $allFiles, string $pattern, string $channel): array
+    {
+        $logDir = storage_path('logs');
+
+        if ($requested !== '' && preg_match($pattern, $requested) && in_array($requested, $allFiles, true)) {
+            $path = $logDir . DIRECTORY_SEPARATOR . $requested;
+            if (is_file($path)) {
+                return [$requested, $path];
+            }
+        }
+
+        // fallback: último disponible (si lo hay)
+        if (!empty($allFiles)) {
+            $fallback = $allFiles[0];
+            return [$fallback, $logDir . DIRECTORY_SEPARATOR . $fallback];
+        }
+
+        // último recurso: intentar último por nombre (legacy)
+        $latestPath = $this->latestChannelPath($channel);
+        if ($latestPath && is_file($latestPath)) {
+            return [basename($latestPath), $latestPath];
+        }
+
+        return [null, null];
+    }
+
+    /**
+     * Busca el último archivo del canal (daily o single). Legacy/fallback.
      */
     private function latestChannelPath(string $channel): ?string
     {
         $single = storage_path("logs/{$channel}.log");
         $dailyGlob = storage_path("logs/{$channel}-*.log");
 
-        // Prioriza daily si existe alguno
         $dailyFiles = glob($dailyGlob) ?: [];
         if (!empty($dailyFiles)) {
-            rsort($dailyFiles, SORT_STRING); // el más reciente primero por nombre
+            rsort($dailyFiles, SORT_STRING);
             return $dailyFiles[0];
         }
         if (is_file($single)) return $single;
@@ -86,6 +147,7 @@ class LogViewerController extends Controller
 
     /**
      * Lee eficientemente las últimas $lines líneas de un archivo (tail).
+     * Retorna string con saltos de línea.
      */
     private function tailFile(string $filepath, int $lines = 400, int $buffer = 4096): string
     {
@@ -93,12 +155,8 @@ class LogViewerController extends Controller
         if ($f === false) return '';
 
         $output = '';
-        $chunk = '';
-        $pos = -1;
-        $lineCount = 0;
-
-        fseek($f, 0, SEEK_END);
-        $filesize = ftell($f);
+        $chunk  = '';
+        $filesize = filesize($filepath);
 
         while ($filesize > 0) {
             $seek = max($filesize - $buffer, 0);
@@ -107,8 +165,7 @@ class LogViewerController extends Controller
             $chunk = fread($f, $read) . $chunk;
             $filesize = $seek;
 
-            $linesFound = substr_count($chunk, "\n");
-            if ($linesFound >= $lines + 1) { // +1 para evitar cortar la primera línea
+            if (substr_count($chunk, "\n") >= $lines + 1) {
                 $pos = $this->nthLastPos($chunk, "\n", $lines);
                 $output = substr($chunk, $pos + 1);
                 break;
