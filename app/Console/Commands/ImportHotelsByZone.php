@@ -72,13 +72,22 @@ XML;
                     }
 
                     foreach ($services as $hotel) {
+                        $zoneCode = isset($hotel->serhot->codzge) && $hotel->serhot->codzge !== ''
+                            ? (string) $hotel->serhot->codzge
+                            : null;
+
+                        // 👇 Solo usa zone_code si existe en la tabla zones; si no, déjalo en null
+                        if ($zoneCode && ! Zone::where('code', $zoneCode)->exists()) {
+                            $zoneCode = null;
+                        }
+
                         Hotel::updateOrCreate(
                             ['codser' => (string) $hotel->codser],
                             [
-                                'zone_code' => (string) ($hotel->serhot->codzge ?? $zone->code),
-                                'name' => (string) ($hotel->nomser ?? null),
-                                'category' => (string) ($hotel->codsca ?? null),
-                                'type' => (string) ($hotel->codtse ?? null),
+                                'zone_code' => $zoneCode,
+                                'name'      => (string) ($hotel->nomser ?? null),
+                                'category'  => (string) ($hotel->codsca ?? null),
+                                'type'      => (string) ($hotel->codtse ?? null),
                             ]
                         );
                         $total++;
@@ -86,7 +95,6 @@ XML;
 
                     $this->info("  ✅ Hoteles guardados para zona {$zone->code}: " . count($services));
                     break;
-
                 } catch (ConnectionException $e) {
                     $this->warn("  🔁 Conexión reiniciada en zona {$zone->code}. Reintentando en 5 segundos...");
                     sleep(5);

@@ -23,6 +23,7 @@ class UseSelectedDatabase
         // Fija la conexión por defecto en runtime
         DB::setDefaultConnection($selected);
 
+        
         return $next($request);
     }
 }

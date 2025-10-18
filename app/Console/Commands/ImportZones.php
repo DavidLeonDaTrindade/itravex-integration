@@ -31,7 +31,7 @@ class ImportZones extends Command
         $this->info('📦 Importando zonas desde la API de Itravex...');
 
         // Puedes regenerar la sesión automáticamente si lo prefieres
-        $sessionId = 'XML#26360#613115582005001';
+        $sessionId = 'XML#26360#870020370650001';
         // Sustituye si es dinámica
 
         $xml = <<<XML

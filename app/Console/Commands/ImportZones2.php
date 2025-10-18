@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 
 class ImportZones2 extends Command
 {
@@ -91,19 +92,27 @@ XML;
             return;
         }
 
-        // 💾 Guardar en la base de datos cliente2
+        $conn = DB::connection('mysql_cli2');
+        $inserted = 0;
+
         foreach ($zones as $zone) {
-            \App\Models\Zone::on('mysql_cli2')->updateOrCreate(
-                ['code' => (string) $zone->codzge],
+            $code = (string) ($zone->codzge ?? '');
+            if ($code === '') continue;
+
+            $conn->table('zones')->updateOrInsert(
+                ['code' => $code],
                 [
-                    'parent_code' => (string) $zone->zgesup ?: null,
-                    'type'        => (string) $zone->tipzge,
-                    'name'        => trim((string) $zone->nomzge) ?: null,
-                    'is_final'    => ((string)$zone->chkfin === 'S'),
+                    'parent_code' => (string) ($zone->zgesup ?? null) ?: null,
+                    'type'        => (string) ($zone->tipzge ?? ''),
+                    'name'        => trim((string) ($zone->nomzge ?? '')) ?: null,
+                    'is_final'    => ((string) ($zone->chkfin ?? '') === 'S'),
+                    'updated_at'  => now(),
+                    'created_at'  => now(), // o solo cuando insertes; updateOrInsert no lo distingue
                 ]
             );
+            $inserted++;
         }
 
-        $this->info('✅ Zonas importadas correctamente en cliente2. Total: ' . count($zones));
+        $this->info("✅ Zonas guardadas en itravex2: {$inserted}");
     }
 }

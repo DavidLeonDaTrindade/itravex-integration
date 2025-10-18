@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laravel_app
+    ports:
+      - "8000:80"              # http://localhost:8000
+    volumes:
+      - ./:/var/www/html       # monta tu proyecto
+    depends_on:
+      - mysql
+    environment:
+      APACHE_DOCUMENT_ROOT: /var/www/html/public
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: itravex
+      MYSQL_ROOT_PASSWORD: Portu628.
+      MYSQL_USER: app
+      MYSQL_PASSWORD: Portu628.
+    volumes:
+      - dbdata:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: pma
+    restart: unless-stopped
+    ports:
+      - "8081:80"              # http://localhost:8081
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: Portu628.
+    depends_on:
+      - mysql
+
+volumes:
+  dbdata:

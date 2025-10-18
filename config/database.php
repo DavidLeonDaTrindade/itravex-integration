@@ -65,7 +65,7 @@ return [
         'mysql_cli2' => [
             'driver' => 'mysql',
             'host' => env('DB_HOST_CLI2', '127.0.0.1'),
-            'port' => env('DB_PORT_CLI2', '3308'),
+            'port' => env('DB_PORT_CLI2', '3306'),
             'database' => env('DB_NAME_CLI2', 'itravex_cliente2'),
             'username' => env('DB_USER_CLI2', 'cliente2_user'),
             'password' => env('DB_PASS_CLI2', ''),
