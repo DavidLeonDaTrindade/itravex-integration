@@ -102,10 +102,33 @@
                 </div>
               </div>
             </a>
+                        {{-- GIATA – Proveedores --}}
+<a href="{{ route('giata.providers.index') }}"
+  class="group rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition">
+  <div class="flex items-center gap-3">
+    <span class="inline-flex h-8 w-8 items-center justify-center rounded-md"
+          style="background:#00466510; border:1px solid #00466525;">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           style="color:#004665">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"
+              d="M3 7h18M3 12h18M3 17h18M7 7v10" />
+      </svg>
+    </span>
+    <div class="flex-1">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-medium text-slate-900">GIATA – Proveedores</h2>
+        <svg class="h-4 w-4 text-slate-400 transition group-hover:text-slate-600" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707A1 1 0 118.707 5.293l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+        </svg>
+      </div>
+      <p class="mt-1 text-xs text-slate-600">Busca proveedores de GIATA por nombre y tipo (GDS / TTOO).</p>
+    </div>
+  </div>
+</a>
 
             {{-- Logs Itravex --}}
             <a href="{{ route('logs.itravex') }}"
-              class="group sm:col-span-2 rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition">
+  class="group rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 ring-1 ring-slate-200">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -123,6 +146,8 @@
                 </div>
               </div>
             </a>
+
+
           </div>
 
           <footer class="mt-10 pt-6 border-t border-slate-200 text-xs text-slate-500">

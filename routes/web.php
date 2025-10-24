@@ -13,6 +13,10 @@ use Illuminate\Http\Request;
 use App\Models\Hotel;
 use App\Models\Zone;
 use App\Http\Controllers\HotelSearchController;
+use App\Http\Controllers\GiataProviderController;
+
+
+
 
 Route::get('/', fn() => view('welcome'))->name('home');
 
@@ -117,6 +121,12 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/search/hotels', [HotelSearchController::class, 'search'])
     ->name('search.hotels');
+
+    Route::get('/giata/providers', [GiataProviderController::class, 'index'])
+            ->name('giata.providers.index');
+
+            Route::get('/giata/providers/search', [GiataProviderController::class, 'search'])
+    ->name('giata.providers.search'); // ← nueva ruta JSON
 
 });
 
