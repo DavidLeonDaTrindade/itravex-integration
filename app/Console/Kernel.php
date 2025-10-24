@@ -18,9 +18,19 @@ class Kernel extends ConsoleKernel
     ];
 
     protected function schedule(Schedule $schedule): void
-    {
-        // Puedes programar tareas aquí si lo deseas
-    }
+{
+    // 1) Sonda: escribe una marca cada minuto
+    $schedule->call(function () {
+        file_put_contents(storage_path('logs/schedule_probe.txt'), date('c').PHP_EOL, FILE_APPEND);
+    })->everyMinute();
+
+    // 2) Tu comando (sigue igual)
+    $schedule->command('giata:sync-providers')
+        ->everyMinute()  // temporal para probar
+        ->withoutOverlapping()
+        ->sendOutputTo(storage_path('logs/giata_sync.log'));
+}
+
 
     protected function commands(): void
     {

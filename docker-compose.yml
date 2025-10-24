@@ -1,3 +1,5 @@
+name: itravex-integration
+
 services:
   app:
     build:
@@ -5,9 +7,9 @@ services:
       dockerfile: Dockerfile
     container_name: laravel_app
     ports:
-      - "8000:80"              # http://localhost:8000
+      - "8000:80"
     volumes:
-      - ./:/var/www/html       # monta tu proyecto
+      - ./:/var/www/html
     depends_on:
       - mysql
     environment:
@@ -21,9 +23,9 @@ services:
       - "3306:3306"
     environment:
       MYSQL_DATABASE: itravex
-      MYSQL_ROOT_PASSWORD: Portu628.
+      MYSQL_ROOT_PASSWORD: "Portu628."
       MYSQL_USER: app
-      MYSQL_PASSWORD: Portu628.
+      MYSQL_PASSWORD: "Portu628."
     volumes:
       - dbdata:/var/lib/mysql
 
@@ -32,13 +34,36 @@ services:
     container_name: pma
     restart: unless-stopped
     ports:
-      - "8081:80"              # http://localhost:8081
+      - "8081:80"
     environment:
       PMA_HOST: mysql
       PMA_USER: root
-      PMA_PASSWORD: Portu628.
+      PMA_PASSWORD: "Portu628."
+    depends_on:
+      - mysql
+
+  db-backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    environment:
+      TZ: Atlantic/Canary
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: backup
+      DB_PASSWORD: "BackUp!2025"
+      DB_NAME: "itravex itravex2"
+      SCHEDULE: "0 2 * * *"
+      RETENTION_DAYS: 7
+    volumes:
+      - ./backups:/backups
+    command: >
+      sh -lc "echo \"$$SCHEDULE /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1\" > /etc/crontabs/root && crond -f -l 8"
+    restart: unless-stopped
     depends_on:
       - mysql
 
 volumes:
   dbdata:
+    external: true
+    name: itravex-integration_dbdata
