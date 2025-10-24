@@ -17,9 +17,9 @@ class SyncGiataProviders extends Command
             $types = ['gds','tourOperator'];
         }
 
-        $base = rtrim(config('services.giata.base_url', env('GIATA_BASE_URL')), '/');
-        $user = env('GIATA_USER');
-        $pass = env('GIATA_PASS');
+        $base = rtrim(config('services.giata.base_url') ?? env('GIATA_BASE_URL'), '/');
+        $user = config('services.giata.user');
+        $pass = config('services.giata.pass');
 
         foreach ($types as $type) {
             $url = "{$base}/providers/{$type}";
