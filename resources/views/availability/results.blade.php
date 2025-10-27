@@ -1289,12 +1289,18 @@
                                     @php
                                     $provUpper = strtoupper($prov);
                                     $isIntProv = in_array($provUpper, $internalCodtous, true);
+                                    $isChannel = in_array($provUpper, $channelCodtous, true);
                                     $provPretty = $provLabel($prov);
                                     @endphp
 
                                     <li>
                                         <strong>{{ $provPretty }}</strong>: {{ $cnt }} tarifas
-                                        @if($isIntProv) <span class="badge badge-internal ml-2">Interna</span> @endif
+                                        @if($isIntProv)
+                                        <span class="badge badge-internal ml-2">Interna</span>
+                                        @endif
+                                        @if($isChannel)
+                                        <span class="badge badge-channel ml-2">Channel</span>
+                                        @endif
                                     </li>
                                     @endforeach
                                 </ul>
