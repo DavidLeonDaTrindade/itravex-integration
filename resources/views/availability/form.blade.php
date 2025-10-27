@@ -88,19 +88,40 @@
             </div>
 
             {{-- ======================== FECHAS / ADULTOS ======================== --}}
+            @php
+            $today = date('Y-m-d');
+            @endphp
+
             <div>
               <label for="fecini" class="block text-sm font-medium text-slate-700">Fecha Inicio</label>
-              <input id="fecini" type="date" name="fecini" value="{{ old('fecini') }}" required
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              <input
+                id="fecini"
+                type="date"
+                name="fecini"
+                value="{{ old('fecini') }}"
+                required
+                min="{{ $today }}"
+                onclick="this.showPicker()"
+                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                 autocomplete="off" />
             </div>
 
             <div>
               <label for="fecfin" class="block text-sm font-medium text-slate-700">Fecha Fin</label>
-              <input id="fecfin" type="date" name="fecfin" value="{{ old('fecfin') }}" required
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              <input
+                id="fecfin"
+                type="date"
+                name="fecfin"
+                value="{{ old('fecfin') }}"
+                required
+                min="{{ $today }}"
+                onclick="this.showPicker()"
+                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                 autocomplete="off" />
             </div>
+
+
+
 
             <!-- ===== Habitaciones (multihabitación con edades de niños) ===== -->
             <div class="md:col-span-2 rounded-xl border border-slate-200 p-4">
@@ -126,13 +147,13 @@
                       <input type="number" min="1" max="4" name="rooms[__i__][adl]" value="2"
                         class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 adl-input" required />
                     </div>
-                    
+
                     <div>
                       <label class="block text-sm font-medium text-slate-700">Edades de los adultos</label>
                       <div class="adult-ages-wrap grid grid-cols-3 gap-2">
                         <!-- aquí se pintan los inputs según nº de adultos -->
                       </div>
-                      
+
                       <p class="mt-1 text-xs text-slate-500">Opcional. Si las indicas, se usarán para calcular FECNAC en el bloqueo.</p>
                     </div>
                     </br>
@@ -271,6 +292,22 @@
       </div>
     </div>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const fecini = document.getElementById('fecini');
+      const fecfin = document.getElementById('fecfin');
+
+      fecini.addEventListener('change', function() {
+        // Establece el mínimo de fecfin igual a fecini
+        fecfin.min = fecini.value;
+
+        // Si la fecha fin actual es anterior, la borra
+        if (fecfin.value && fecfin.value < fecini.value) {
+          fecfin.value = fecini.value;
+        }
+      });
+    });
+  </script>
 
   <script>
     (function() {
