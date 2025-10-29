@@ -120,6 +120,7 @@ class AvailabilityController extends Controller
                 'pass'        => 'sometimes|string|nullable',
                 'codtou'      => 'sometimes|string|nullable',
                 'codnac'      => 'nullable|string|min:2|max:3',
+
             ]);
 
             // ✅ normaliza y cachea rooms para la redirección (evita URLs largas)
@@ -276,6 +277,11 @@ class AvailabilityController extends Controller
         $firstHeaders = null;
         $totalBytes   = 0;
 
+        //Metricas respuesta xml
+        $allResponses = [];
+        $responsePreview = null;
+
+
         // Contenedores
         $allHotels            = [];
         $totalRooms           = 0;
@@ -404,6 +410,7 @@ XML;
                 }
 
                 $rawBody = (string) $resp->getBody();
+                $allResponses[] = $rawBody;
                 $totalBytes += strlen($rawBody);
                 $xml = @simplexml_load_string($rawBody, "SimpleXMLElement", LIBXML_NOCDATA);
                 if ($xml === false) break;
@@ -656,7 +663,7 @@ XML;
             $t_http0 = microtime(true);
             $each = new \GuzzleHttp\Promise\EachPromise($promises, [
                 'concurrency' => $maxConcurrency,
-                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets) {
+                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets, &$allResponses) {
                     if ($firstHeaders === null) {
                         $firstHeaders = [
                             'date'              => $response->getHeaderLine('Date') ?: null,
@@ -668,6 +675,7 @@ XML;
                         ];
                     }
                     $rawBody = (string) $response->getBody();
+                    $allResponses[] = $rawBody;
                     $totalBytes += strlen($rawBody);
 
                     $xml = @simplexml_load_string($rawBody, "SimpleXMLElement", LIBXML_NOCDATA);
@@ -886,6 +894,19 @@ XML;
             }
         }
         $firstPayload = $payloadPreview;
+        $responseMeta = ['batches' => count($allResponses), 'showing' => 0];
+        if (!empty($allResponses)) {
+            $maxShow = 5;
+            $toShow = array_slice($allResponses, 0, $maxShow);
+            $parts = [];
+            $total = count($allResponses);
+            foreach ($toShow as $i => $rx) {
+                $idx = $i + 1;
+                $parts[] = "<!-- ===== RESPONSE {$idx}/{$total} ===== -->\n" . $rx;
+            }
+            $responsePreview = implode("\n\n", $parts);
+            $responseMeta['showing'] = count($toShow);
+        }
 
         // Export CSV
         if ($request->query('export') === 'csv') {
@@ -968,6 +989,7 @@ XML;
                 'payloads'              => $allPayloads,
                 'payload_meta'          => $payloadMeta,
                 'payload_preview'       => $payloadPreview,
+                'firstResponse'    => $responsePreview, 
             ]);
         }
 
@@ -1006,6 +1028,7 @@ XML;
             'firstPayload'         => $payloadPreview,
             'payloads'             => $allPayloads,
             'payload_meta'         => $payloadMeta,
+            'firstResponse'    => $responsePreview, 
         ]);
     }
 
