@@ -784,6 +784,9 @@ XML;
         $offset = ($currentPage - 1) * $perPage;
         $visibleHotels = array_slice($allHotels, $offset, $perPage);
 
+        // 👉 Enriquecer SOLO lo visible (más eficiente)
+        $visibleHotels = $this->attachZoneNames($visibleHotels);
+
         // Enriquecer cada hotel visible con totales y desglose por proveedor
         foreach ($visibleHotels as &$h) {
             $h['rate_count'] = is_countable($h['rooms'] ?? null) ? count($h['rooms']) : 0;
@@ -989,7 +992,7 @@ XML;
                 'payloads'              => $allPayloads,
                 'payload_meta'          => $payloadMeta,
                 'payload_preview'       => $payloadPreview,
-                'firstResponse'    => $responsePreview, 
+                'firstResponse'    => $responsePreview,
             ]);
         }
 
@@ -1028,7 +1031,7 @@ XML;
             'firstPayload'         => $payloadPreview,
             'payloads'             => $allPayloads,
             'payload_meta'         => $payloadMeta,
-            'firstResponse'    => $responsePreview, 
+            'firstResponse'    => $responsePreview,
         ]);
     }
 
@@ -1650,5 +1653,29 @@ XML;
             'pass'     => $pick('pass',     'itravex.pass'),
             'codtou'   => $r->filled('codtou') ? $r->input('codtou') : 'LIB',
         ];
+    }
+
+    private function attachZoneNames(array $hotels): array
+    {
+        // 1) Reunir códigos de zona presentes (en tu array vienen en la clave 'zone')
+        $codes = collect($hotels)->pluck('zone')->filter()->unique()->values();
+
+        if ($codes->isEmpty()) {
+            // nada que resolver
+            return $hotels;
+        }
+
+        // 2) Traer mapa [code => name]
+        $names = Zone::whereIn('code', $codes)->pluck('name', 'code');
+
+        // 3) Añadir zone_code y zone_name a cada hotel
+        foreach ($hotels as &$h) {
+            $code = $h['zone'] ?? null;         // tu array actual trae 'zone' (ej. "A-763")
+            $h['zone_code'] = $code;            // opcional, por consistencia en Blade
+            $h['zone_name'] = $code ? ($names[$code] ?? null) : null;
+        }
+        unset($h);
+
+        return $hotels;
     }
 }
