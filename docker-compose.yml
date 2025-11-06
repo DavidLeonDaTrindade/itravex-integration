@@ -53,7 +53,7 @@ services:
       DB_USER: backup
       DB_PASSWORD: "BackUp!2025"
       DB_NAME: "itravex itravex2"
-      SCHEDULE: "0 2 * * *"
+      SCHEDULE: "0 10 * * *"
       RETENTION_DAYS: 7
     volumes:
       - ./backups:/backups

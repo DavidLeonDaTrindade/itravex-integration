@@ -120,7 +120,6 @@ class AvailabilityController extends Controller
                 'pass'        => 'sometimes|string|nullable',
                 'codtou'      => 'sometimes|string|nullable',
                 'codnac'      => 'nullable|string|min:2|max:3',
-
             ]);
 
             // ✅ normaliza y cachea rooms para la redirección (evita URLs largas)
@@ -277,11 +276,6 @@ class AvailabilityController extends Controller
         $firstHeaders = null;
         $totalBytes   = 0;
 
-        //Metricas respuesta xml
-        $allResponses = [];
-        $responsePreview = null;
-
-
         // Contenedores
         $allHotels            = [];
         $totalRooms           = 0;
@@ -410,7 +404,6 @@ XML;
                 }
 
                 $rawBody = (string) $resp->getBody();
-                $allResponses[] = $rawBody;
                 $totalBytes += strlen($rawBody);
                 $xml = @simplexml_load_string($rawBody, "SimpleXMLElement", LIBXML_NOCDATA);
                 if ($xml === false) break;
@@ -663,7 +656,7 @@ XML;
             $t_http0 = microtime(true);
             $each = new \GuzzleHttp\Promise\EachPromise($promises, [
                 'concurrency' => $maxConcurrency,
-                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets, &$allResponses) {
+                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets) {
                     if ($firstHeaders === null) {
                         $firstHeaders = [
                             'date'              => $response->getHeaderLine('Date') ?: null,
@@ -675,7 +668,6 @@ XML;
                         ];
                     }
                     $rawBody = (string) $response->getBody();
-                    $allResponses[] = $rawBody;
                     $totalBytes += strlen($rawBody);
 
                     $xml = @simplexml_load_string($rawBody, "SimpleXMLElement", LIBXML_NOCDATA);
@@ -783,9 +775,6 @@ XML;
 
         $offset = ($currentPage - 1) * $perPage;
         $visibleHotels = array_slice($allHotels, $offset, $perPage);
-
-        // 👉 Enriquecer SOLO lo visible (más eficiente)
-        $visibleHotels = $this->attachZoneNames($visibleHotels);
 
         // Enriquecer cada hotel visible con totales y desglose por proveedor
         foreach ($visibleHotels as &$h) {
@@ -897,19 +886,6 @@ XML;
             }
         }
         $firstPayload = $payloadPreview;
-        $responseMeta = ['batches' => count($allResponses), 'showing' => 0];
-        if (!empty($allResponses)) {
-            $maxShow = 5;
-            $toShow = array_slice($allResponses, 0, $maxShow);
-            $parts = [];
-            $total = count($allResponses);
-            foreach ($toShow as $i => $rx) {
-                $idx = $i + 1;
-                $parts[] = "<!-- ===== RESPONSE {$idx}/{$total} ===== -->\n" . $rx;
-            }
-            $responsePreview = implode("\n\n", $parts);
-            $responseMeta['showing'] = count($toShow);
-        }
 
         // Export CSV
         if ($request->query('export') === 'csv') {
@@ -992,7 +968,6 @@ XML;
                 'payloads'              => $allPayloads,
                 'payload_meta'          => $payloadMeta,
                 'payload_preview'       => $payloadPreview,
-                'firstResponse'    => $responsePreview,
             ]);
         }
 
@@ -1031,7 +1006,6 @@ XML;
             'firstPayload'         => $payloadPreview,
             'payloads'             => $allPayloads,
             'payload_meta'         => $payloadMeta,
-            'firstResponse'    => $responsePreview,
         ]);
     }
 
@@ -1451,7 +1425,7 @@ XML;
         }
 
         $sessionId = session('ideses');
-        $locata = session('locata');
+        $locata    = session('locata');
 
         if (!$sessionId || !$locata) {
             return back()->withErrors(['Faltan datos para cerrar la reserva.']);
@@ -1462,27 +1436,61 @@ XML;
             return back()->withErrors(['La sesión ha expirado. Realiza nuevamente la búsqueda.']);
         }
 
+        // ✅ Validación de datos de contacto (requeridos)
+        $validated = $request->validate([
+            'percon.nombre' => ['required', 'string', 'max:80'],
+            'percon.priape' => ['required', 'string', 'max:80'],
+            'percon.tel'    => ['required', 'string', 'max:30'],
+            // Opcionales según especificación
+            'refage'        => ['nullable', 'string', 'max:50'],
+            'accion'        => ['nullable', 'in:F,C'], // Ajusta a los valores que soporte el proveedor
+        ]);
+
+        // Sanitiza mínimamente el teléfono (ajusta si necesitas otras reglas)
+        $tel = preg_replace('/[^0-9+\s\-()]/', '', $validated['percon']['tel']);
+        $nombre = trim($validated['percon']['nombre']);
+        $priape = trim($validated['percon']['priape']);
+        $refage = $validated['refage'] ?? null;
+        $accion = $validated['accion'] ?? null;
+
+        // 🧩 Construcción XML: mantenemos nodos actuales y añadimos <percon>; incluimos <refage>/<accion> si vienen.
+        $perconXml = <<<XML
+<percon>
+  <nombre>{$this->xmlEscape($nombre)}</nombre>
+  <priape>{$this->xmlEscape($priape)}</priape>
+  <tel>{$this->xmlEscape($tel)}</tel>
+</percon>
+XML;
+
+        $refageXml = $refage ? '<refage>' . $this->xmlEscape($refage) . '</refage>' : '';
+        $accionXml = $accion ? '<accion>' . $this->xmlEscape($accion) . '</accion>' : '';
+
         $xml = <<<XML
 <ReservaCerrarPeticion>
-  <ideses>{$sessionId}</ideses>
-  <codtou>{$cfg['codtou']}</codtou>
-  <locata>{$locata}</locata>
+  <ideses>{$this->xmlEscape($sessionId)}</ideses>
+  <codtou>{$this->xmlEscape($cfg['codtou'])}</codtou>
+  <locata>{$this->xmlEscape($locata)}</locata>
   <tipres>C</tipres>
+  {$perconXml}
+  {$refageXml}
+  {$accionXml}
 </ReservaCerrarPeticion>
 XML;
 
-        Log::channel('itravex')->info("🔐 Petición ReservaCerrar enviada.");
+        \Log::channel('itravex')->info("🔐 Petición ReservaCerrar enviada.", ['xml' => $xml]);
 
-        $response = Http::withBody($xml, 'application/xml')->post($cfg['endpoint']);
+        $response = \Http::withBody($xml, 'application/xml')->post($cfg['endpoint']);
 
-        Log::channel('itravex')->info("✅ Respuesta ReservaCerrar RAW:\n" . $response->body());
-
+        \Log::channel('itravex')->info("✅ Respuesta ReservaCerrar RAW:\n" . $response->body());
 
         if (!$response->successful()) {
             return back()->withErrors(['Error al cerrar la reserva con el proveedor.']);
         }
 
-        $xmlResponse = simplexml_load_string($response->body());
+        $xmlResponse = @simplexml_load_string($response->body());
+        if ($xmlResponse === false) {
+            return back()->withErrors(['Respuesta del proveedor no es XML válido.']);
+        }
 
         // Verificar error explícito
         if (isset($xmlResponse->error) || isset($xmlResponse->txterr)) {
@@ -1490,41 +1498,145 @@ XML;
             return back()->withErrors(['Error al cerrar reserva: ' . $mensaje]);
         }
 
-        // Nodos opcionales
-        $resser = $xmlResponse->resser ?? null;
-        $estsmo = $resser->estsmo ?? null;
+        // ── Extrae primer <resser> y su primer <estsmo> si existen ─────────────────────
+        $firstReser = null;
+        $firstSmo   = null;
 
+        $ressers = $xmlResponse->xpath('//resser');
+        if (is_array($ressers) && isset($ressers[0])) {
+            $firstReser = $ressers[0];
+            if (isset($firstReser->estsmo) && count($firstReser->estsmo) > 0) {
+                $firstSmo = $firstReser->estsmo[0];
+            }
+        } elseif (isset($xmlResponse->resser)) {
+            $firstReser = $xmlResponse->resser;
+            if (isset($firstReser->estsmo)) {
+                $firstSmo = $firstReser->estsmo;
+            }
+        }
+
+        // ── Fechas: intenta d/m/Y H:i y si no, d/m/Y ───────────────────────────────────
+        $parseDate = function ($str) {
+            $str = (string) $str;
+            if ($str === '') return null;
+            try {
+                return \Carbon\Carbon::createFromFormat('d/m/Y H:i', $str)->toDateString();
+            } catch (\Exception $e) {
+                try {
+                    return \Carbon\Carbon::createFromFormat('d/m/Y', $str)->toDateString();
+                } catch (\Exception $e2) {
+                    return null;
+                }
+            }
+        };
+
+        $startDate = $firstReser && isset($firstReser->fecini) ? $parseDate($firstReser->fecini) : null;
+        $endDate   = $firstReser && isset($firstReser->fecfin) ? $parseDate($firstReser->fecfin) : null;
+
+        // ── Conteo robusto de huéspedes ────────────────────────────────────────────────
+        $totalGuests = 0;
+
+        // 1) Esquema con <respas> (uno por pasajero)
+        $nodesRespas = $xmlResponse->xpath('//respas');
+        if (is_array($nodesRespas) && !empty($nodesRespas)) {
+            $totalGuests = count($nodesRespas);
+        }
+
+        // 2) Esquema alternativo con <pasage><adl> y <nin>
+        if ($totalGuests === 0 && isset($xmlResponse->pasage)) {
+            $adlCount = 0;
+            $ninCount = 0;
+
+            if (isset($xmlResponse->pasage->adl)) {
+                // puede ser múltiples <adl/> o un número
+                $adlNode = $xmlResponse->pasage->adl;
+                if (is_array($adlNode) || $adlNode instanceof \Traversable) {
+                    $adlCount = count($adlNode);
+                } else {
+                    $adlCount = (string)$adlNode !== '' ? (int)$adlNode : 0;
+                }
+            }
+
+            if (isset($xmlResponse->pasage->nin)) {
+                $ninNode = $xmlResponse->pasage->nin;
+                if (is_array($ninNode) || $ninNode instanceof \Traversable) {
+                    $ninCount = count($ninNode);
+                } else {
+                    $ninCount = (string)$ninNode !== '' ? (int)$ninNode : 0;
+                }
+            }
+
+            $totalGuests = $adlCount + $ninCount;
+        }
+
+        // 3) Fallback: usa la distribución guardada en sesión si todo lo anterior falla
+        if ($totalGuests === 0) {
+            $distri = session('form_data.distri') ?? session('distri') ?? null;
+            if (is_array($distri) && !empty($distri)) {
+                foreach ($distri as $v) {
+                    $numadl = isset($v['numadl']) ? (int)$v['numadl'] : 0;
+                    $numnin = isset($v['numnin']) ? (int)$v['numnin'] : 0;
+                    $totalGuests += $numadl + $numnin;
+                }
+            }
+        }
+        // Antes del create, resuelve status con fallbacks
+        $status =
+            ($firstSmo && isset($firstSmo->estado) && (string)$firstSmo->estado !== '')
+            ? (string)$firstSmo->estado
+            : (($firstSmo && isset($firstSmo->cupest) && (string)$firstSmo->cupest !== '')
+                ? (string)$firstSmo->cupest
+                : ((isset($xmlResponse->estado) && (string)$xmlResponse->estado !== '')
+                    ? (string)$xmlResponse->estado
+                    : ((isset($xmlResponse->cupest) && (string)$xmlResponse->cupest !== '')
+                        ? (string)$xmlResponse->cupest
+                        : 'UNK'))); // último recurso si tu columna no permite NULL
+
+        // ── Guardado ──────────────────────────────────────────────────────────────────
         try {
             ItravexReservation::create([
-                'locata' => $locata,
-                'hotel_name' => $resser ? (string) $resser->nomser : null,
-                'hotel_code' => $resser ? (string) $resser->codser : null,
-                'room_type' => $estsmo ? (string) $estsmo->codsmo : null,
-                'board' => $estsmo ? (string) $estsmo->codral : null,
-                'start_date' => $resser && isset($resser->fecini)
-                    ? \Carbon\Carbon::createFromFormat('d/m/Y H:i', (string) $resser->fecini)->toDateString()
-                    : null,
-                'end_date' => $resser && isset($resser->fecfin)
-                    ? \Carbon\Carbon::createFromFormat('d/m/Y H:i', (string) $resser->fecfin)->toDateString()
-                    : null,
-                'num_guests' => isset($xmlResponse->pasage->adl) ? count($xmlResponse->pasage->adl) : 0,
-                'total_price' => $resser ? (float) $resser->impnoc : 0,
-                'currency' => isset($xmlResponse->coddiv) ? (string) $xmlResponse->coddiv : null,
-                'status' => $resser ? (string) $resser->cupest : null,
+                'locata'      => $locata,
+                'hotel_name'  => $firstReser ? (string) $firstReser->nomser : null,
+                'hotel_code'  => $firstReser ? (string) $firstReser->codser : null,
+                'room_type'   => $firstSmo ? (string) $firstSmo->codsmo : null,
+                'board'       => $firstSmo ? (string) $firstSmo->codral : null,
+                'start_date'  => $startDate,
+                'end_date'    => $endDate,
+                'num_guests'  => $totalGuests,
+                'total_price' => $firstReser && isset($firstReser->impnoc) ? (float) $firstReser->impnoc : 0,
+                'currency'    => isset($xmlResponse->coddiv) ? (string) $xmlResponse->coddiv : null,
+                'status'      => $status,
+
+                // Si tienes columnas para contacto/agencia, descomenta:
+                // 'contact_name'  => trim($nombre . ' ' . $priape),
+                // 'contact_phone' => $tel,
+                // 'agency_ref'    => $refage,
             ]);
         } catch (\Exception $e) {
-            Log::channel('itravex')->error('❌ Error al guardar reserva: ' . $e->getMessage());
+            \Log::channel('itravex')->error('❌ Error al guardar reserva: ' . $e->getMessage());
             return back()->withErrors(['Ocurrió un error al guardar la reserva.']);
         }
 
-        // Limpieza de sesión de datos sensibles de la reserva (no borramos provider_cfg)
+        // Limpieza de sesión
         session()->forget(['ideses', 'ideses_created_at', 'locata']);
 
         return redirect()
             ->route('availability.lock.form')
-            ->with('success', 'Reserva cerrada y registrada correctamente.')
+            ->with('success', 'Reserva cerrada y registrado el contacto correctamente.')
             ->with('form_data', session('form_data'));
     }
+
+
+
+
+    /**
+     * Escapado simple para XML (por si no usas DOMDocument)
+     */
+    private function xmlEscape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+    }
+
 
     public function cancelReservation(Request $request)
     {
@@ -1653,29 +1765,5 @@ XML;
             'pass'     => $pick('pass',     'itravex.pass'),
             'codtou'   => $r->filled('codtou') ? $r->input('codtou') : 'LIB',
         ];
-    }
-
-    private function attachZoneNames(array $hotels): array
-    {
-        // 1) Reunir códigos de zona presentes (en tu array vienen en la clave 'zone')
-        $codes = collect($hotels)->pluck('zone')->filter()->unique()->values();
-
-        if ($codes->isEmpty()) {
-            // nada que resolver
-            return $hotels;
-        }
-
-        // 2) Traer mapa [code => name]
-        $names = Zone::whereIn('code', $codes)->pluck('name', 'code');
-
-        // 3) Añadir zone_code y zone_name a cada hotel
-        foreach ($hotels as &$h) {
-            $code = $h['zone'] ?? null;         // tu array actual trae 'zone' (ej. "A-763")
-            $h['zone_code'] = $code;            // opcional, por consistencia en Blade
-            $h['zone_name'] = $code ? ($names[$code] ?? null) : null;
-        }
-        unset($h);
-
-        return $hotels;
     }
 }
