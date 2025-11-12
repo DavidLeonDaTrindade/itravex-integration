@@ -36,6 +36,8 @@ return [
     ],
     'giata' => [
         'base_url' => env('GIATA_BASE_URL'),
+        'user'     => env('GIATA_USER'),
+        'pass'     => env('GIATA_PASSWORD'),
     ],
 
 ];

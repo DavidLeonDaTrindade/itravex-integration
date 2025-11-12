@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
@@ -14,12 +15,18 @@ class SyncGiataProviders extends Command
     {
         $types = $this->option('type');
         if (empty($types)) {
-            $types = ['gds','tourOperator'];
+            $types = ['gds', 'tourOperator'];
         }
 
-        $base = rtrim(config('services.giata.base_url') ?? env('GIATA_BASE_URL'), '/');
-        $user = config('services.giata.user');
-        $pass = config('services.giata.pass');
+        $base = rtrim(config('services.giata.base_url', env('GIATA_BASE_URL', 'https://multicodes.giatamedia.com/webservice/rest/1.0')), '/');
+        $user = config('services.giata.user', env('GIATA_USER'));         // GIATA_USER ya incluye "user|company"
+        $pass = config('services.giata.pass', env('GIATA_PASSWORD'));
+
+        if (!$user || !$pass) {
+            $this->error('Credenciales GIATA no encontradas (services.giata.* / .env). Revisa GIATA_USER y GIATA_PASSWORD.');
+            return self::FAILURE;
+        }
+
 
         foreach ($types as $type) {
             $url = "{$base}/providers/{$type}";
@@ -27,7 +34,12 @@ class SyncGiataProviders extends Command
 
             $resp = Http::withBasicAuth($user, $pass)
                 ->accept('application/xml')
+                ->timeout(90)
+                ->connectTimeout(10)
+                ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                ->retry(3, 1500, throw: false)
                 ->get($url);
+
 
             if ($resp->failed()) {
                 $this->error("Fallo {$resp->status()} en {$url}");
@@ -41,7 +53,7 @@ class SyncGiataProviders extends Command
             }
 
             // Registrar namespace xlink para leer @xlink:href
-            $xml->registerXPathNamespace('xlink','http://www.w3.org/1999/xlink');
+            $xml->registerXPathNamespace('xlink', 'http://www.w3.org/1999/xlink');
 
             $count = 0;
             foreach ($xml->provider as $p) {
