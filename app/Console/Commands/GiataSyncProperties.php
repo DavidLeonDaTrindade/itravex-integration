@@ -8,9 +8,9 @@ use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 
-class GiataSyncProperties extends Command
+class GiataSyncPropertiesBasic extends Command
 {
-    protected $signature = 'giata:sync-properties
+    protected $signature = 'giata:sync-properties:basic
         {--provider=itravex : Código del provider (ej. itravex)}
         {--since= : YYYY-MM-DD para sincronización incremental}
         {--country= : ISO2 (ej. ES, DE, US)}
