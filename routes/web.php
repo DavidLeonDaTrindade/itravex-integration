@@ -14,6 +14,8 @@ use App\Models\Hotel;
 use App\Models\Zone;
 use App\Http\Controllers\HotelSearchController;
 use App\Http\Controllers\GiataProviderController;
+use App\Http\Controllers\GiataCodesController;
+
 
 
 
@@ -120,14 +122,20 @@ Route::middleware(['auth'])->group(function () {
         ->where('code', 'A-\d+');
 
     Route::get('/search/hotels', [HotelSearchController::class, 'search'])
-    ->name('search.hotels');
+        ->name('search.hotels');
 
     Route::get('/giata/providers', [GiataProviderController::class, 'index'])
-            ->name('giata.providers.index');
+        ->name('giata.providers.index');
 
-            Route::get('/giata/providers/search', [GiataProviderController::class, 'search'])
-    ->name('giata.providers.search'); // ← nueva ruta JSON
+    Route::get('/giata/providers/search', [GiataProviderController::class, 'search'])
+        ->name('giata.providers.search'); // ← nueva ruta JSON
 
+    Route::get('/giata/codes', [GiataCodesController::class, 'index'])
+        ->name('giata.codes.index');
+
+
+    Route::get('/giata/codes/browser', [GiataCodesController::class, 'browser'])
+        ->name('giata.codes.browser');
 });
 
 require __DIR__ . '/auth.php';

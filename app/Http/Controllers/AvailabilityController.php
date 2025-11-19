@@ -866,15 +866,24 @@ XML;
             'primary_ip'        => $firstNonNull($reqMetrics, 'primary_ip'),
             'note'              => $firstHeaders['note'] ?? null,
         ];
-
+        // 👇 AÑADIMOS UNA LIMPIEZA GLOBAL AQUÍ (antes del preview, fuera de ifs)
+        $sanitizeXml = function (string $xml): string {
+            // elimina el contenido de <codtrf>...</codtrf>
+            return preg_replace('/<codtrf>.*?<\/codtrf>/is', '<codtrf>[OCULTO]</codtrf>', $xml);
+            // o si quieres quitar la etiqueta entera:
+            // return preg_replace('/<codtrf>.*?<\/codtrf>/is', '', $xml);
+        };
         // Preview de payloads (hasta 5)
         if (!empty($allPayloads)) {
             $maxShow = 5;
             $toShow = array_slice($allPayloads, 0, $maxShow);
             $parts = [];
             $total = count($allPayloads);
+
             foreach ($toShow as $i => $px) {
                 $idx = $i + 1;
+                // ⬅️ sanitizar antes de meterlo en el preview
+                $px = $sanitizeXml($px);
                 $parts[] = "<!-- ===== BATCH {$idx}/{$total} ===== -->\n" . $px;
             }
             $payloadPreview = implode("\n\n", $parts);
@@ -932,6 +941,9 @@ XML;
 
         // JSON
         if ($request->wantsJson()) {
+            $sanitizeXml = function (string $xml): string {
+                return preg_replace('/<codtrf>.*?<\/codtrf>/is', '<codtrf>[OCULTO]</codtrf>', $xml);
+            };
             return response()->json([
                 'data'                       => $paginated->items(),
                 'current_page'               => $paginated->currentPage(),
@@ -965,7 +977,7 @@ XML;
                 ],
                 'providers'             => array_keys($providerRateCounts ?? []),
                 'hotel_provider_matrix' => [],
-                'payloads'              => $allPayloads,
+                'payloads'              => array_map($sanitizeXml, $allPayloads),
                 'payload_meta'          => $payloadMeta,
                 'payload_preview'       => $payloadPreview,
             ]);
@@ -1004,7 +1016,7 @@ XML;
             'providers'            => array_keys($providerRateCounts ?? []),
             'hotelProviderMatrix'  => [],
             'firstPayload'         => $payloadPreview,
-            'payloads'             => $allPayloads,
+            'payloads'              => array_map($sanitizeXml, $allPayloads),
             'payload_meta'         => $payloadMeta,
         ]);
     }

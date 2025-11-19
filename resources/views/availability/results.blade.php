@@ -277,7 +277,38 @@
     $c = strtoupper(trim((string)$code));
     return $PROV_MAP[$c] ?? $c;
     };
+
+    // Limpia códigos de habitación/régimen para mostrarlos al usuario
+    $cleanLabel = function ($v) {
+    if (!is_string($v) || $v === '') return '';
+
+    $s = trim($v);
+
+    // 1) Quitar TODO lo que venga después del primer "@"
+    $s = preg_replace('/@.*/u', '', $s);
+
+    // 2) Si hubiese "COD#Texto útil", quedarnos con el texto útil
+    $pos = strpos($s, '#');
+    if ($pos !== false) {
+        $s = trim(substr($s, $pos + 1));
+    }
+
+    // 3) ❗ Quitar códigos tipo AHD28079JP044316, 762414MPT2stpf..., etc.
+    //    Estos son secuencias largas alfanuméricas: las eliminamos si aparecen al final
+    $s = preg_replace('/\b[A-Z0-9]{8,}\b/u', '', $s);
+
+    // 4) Normalizar espacios
+    $s = preg_replace('/\s+/', ' ', $s);
+
+    return trim($s);
+};
+
+
+
+
+
     @endphp
+
     <style>
         /* Badge amarilla para Contratos Propios */
         .badge-contracts {
@@ -1200,27 +1231,45 @@
                 $currency = $hotel['currency'] ?? 'EUR';
                 $roomsAll = collect($hotel['rooms'] ?? []);
 
-                // Helpers
+                // Helpers locales
                 $toFloat = function ($v) {
                 if (is_null($v)) return null;
                 if (is_numeric($v)) return (float) $v;
                 if (is_string($v)) {
                 $v = preg_replace('/[^0-9,.\-]/', '', $v);
-                if (strpos($v, ',') !== false && strpos($v, '.') !== false) $v = str_replace(',', '', $v);
-                else $v = str_replace(',', '.', $v);
+                if (strpos($v, ',') !== false && strpos($v, '.') !== false) {
+                // ambos separadores: asumimos . como decimal
+                $v = str_replace(',', '', $v);
+                } else {
+                // solo coma: la tratamos como decimal
+                $v = str_replace(',', '.', $v);
+                }
                 return is_numeric($v) ? (float) $v : null;
                 }
                 return null;
                 };
-                $afterHash = function ($v) { if (!is_string($v) || $v==='') return ''; $pos=strpos($v,'#'); return
-                $pos===false?trim($v):trim(substr($v,$pos+1)); };
-                $removeSuffix = function ($text,$suffix){ $len=strlen($suffix); return $len>0 &&
-                substr($text,-$len)===$suffix?substr($text,0,-$len):$text; };
-                $norm = function ($s){ $s=is_string($s)?trim($s):''; $s=preg_replace('/\s+/',' ',$s); return
-                mb_strtolower($s); };
-                $getRefdis = function(array $r){ if (isset($r['refdis']) && is_numeric($r['refdis'])) return
-                (int)$r['refdis']; $ic=(string)($r['infrcl']??$r['infrcl_text']??''); $head=strtok($ic,'!~'); return
-                is_numeric($head)?(int)$head:null; };
+
+                $removeSuffix = function ($text, $suffix) {
+                $len = strlen($suffix);
+                return ($len > 0 && substr($text, -$len) === $suffix)
+                ? substr($text, 0, -$len)
+                : $text;
+                };
+
+                $norm = function ($s) {
+                $s = is_string($s) ? trim($s) : '';
+                $s = preg_replace('/\s+/', ' ', $s);
+                return mb_strtolower($s);
+                };
+
+                $getRefdis = function (array $r) {
+                if (isset($r['refdis']) && is_numeric($r['refdis'])) {
+                return (int) $r['refdis'];
+                }
+                $ic = (string) ($r['infrcl'] ?? $r['infrcl_text'] ?? '');
+                $head = strtok($ic, '!~');
+                return is_numeric($head) ? (int) $head : null;
+                };
 
                 // ---- Precio a mostrar en "Desde" ----
                 $minDisplayPrice = null;
@@ -1229,50 +1278,88 @@
                 $minDisplayPrice = $roomsAll
                 ->pluck('price_per_night')
                 ->map($toFloat)
-                ->filter(fn($x) => $x !== null && $x > 0)
+                ->filter(fn ($x) => $x !== null && $x > 0)
                 ->min();
                 } else {
                 $groups = [];
+
                 foreach ($roomsAll as $r) {
-                $codtou = strtoupper((string)($r['codtou'] ?? ''));
+                $codtou = strtoupper((string) ($r['codtou'] ?? ''));
                 $rawSmo = $r['codsmo'] ?? ($r['room_type'] ?? '');
                 $rawCha = $r['codcha'] ?? ($r['room_code'] ?? '');
                 $rawRal = $r['codral'] ?? ($r['board'] ?? '');
                 $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
 
-                $smoLabel = $afterHash($rawSmo);
-                $chaLabel = $afterHash($rawCha);
-                $ralLabel = $afterHash($rawRal);
+                // 👉 usamos el cleanLabel GLOBAL (el que limpia @:@)
+                $smoLabel = $cleanLabel($rawSmo);
+                $chaLabel = $cleanLabel($rawCha);
+                $ralLabel = $cleanLabel($rawRal);
 
                 if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
                 $parts = explode('!~', $infrcl);
                 $last = trim(end($parts));
                 $first = strtok($last, '_');
-                if ($first !== false) { $first = $removeSuffix($first, 'Room'); $chaLabel = trim($first); }
+                if ($first !== false) {
+                $first = $removeSuffix($first, 'Room');
+                $chaLabel = trim($first);
+                }
                 }
 
                 $roomParts = [];
                 if ($smoLabel !== '') $roomParts[] = $smoLabel;
-                if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] = $chaLabel;
+                if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false)
+                $roomParts[] = $chaLabel;
 
                 $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+
+                // ✅ Limpieza extra por si se ha colado algún "@:@..." en el texto final
+                $roomDesc = $cleanLabel($roomDesc);
+
                 $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
 
-                $ref = $getRefdis($r);
-                if (!is_int($ref) || $ref < 1 || $ref> $N) continue;
 
-                    $key = $codtou.'|'.$norm($roomDesc).'|'.$norm($boardDesc);
-                    if (!isset($groups[$key])) $groups[$key] = ['refs'=>[]];
+                $ref = $getRefdis($r);
+                if (!is_int($ref) || $ref < 1 || $ref> $N) {
+                    continue;
+                    }
+
+                    $key = $codtou . '|' . $norm($roomDesc) . '|' . $norm($boardDesc);
+                    if (!isset($groups[$key])) {
+                    $groups[$key] = [
+                    'refs' => [],
+                    ];
+                    }
                     $groups[$key]['refs'][$ref] = $r;
                     }
 
                     $packTotals = [];
                     foreach ($groups as $g) {
-                    $complete = true; $total = 0.0;
-                    for ($i=1; $i <= $N; $i++) { if (empty($g['refs'][$i])) { $complete=false; break; }
-                        $px=$toFloat($g['refs'][$i]['price_per_night'] ?? null); if ($px===null || $px <=0) {
-                        $complete=false; break; } $total +=$px; } if ($complete) $packTotals[]=$total; }
-                        $minDisplayPrice=$packTotals ? min($packTotals) : null; } @endphp
+                    $complete = true;
+                    $total = 0.0;
+
+                    for ($i = 1; $i <= $N; $i++) {
+                        if (empty($g['refs'][$i])) {
+                        $complete=false;
+                        break;
+                        }
+
+                        $px=$toFloat($g['refs'][$i]['price_per_night'] ?? null);
+                        if ($px===null || $px <=0) {
+                        $complete=false;
+                        break;
+                        }
+                        $total +=$px;
+                        }
+
+                        if ($complete) {
+                        $packTotals[]=$total;
+                        }
+                        }
+
+                        $minDisplayPrice=$packTotals ? min($packTotals) : null;
+                        }
+                        @endphp
+
                         {{-- 2) Si NO hay habitaciones o el "Desde" es 0/nulo, saltar ANTES de abrir la card --}}
                         @if($roomsAll->isEmpty() || $minDisplayPrice === null || $minDisplayPrice <= 0) @continue @endif
                             {{-- 3) A partir de aquí pintamos la card con seguridad --}} <div
@@ -1336,18 +1423,7 @@
                                         $requestedRoomsCount = max(0, (int) collect($roomsEffLocal)->count());
                                         $N = max(1, min(4, $requestedRoomsCount));
 
-                                        $afterHash = function ($v) { if (!is_string($v) || $v==='') return '';
-                                        $pos=strpos($v,'#'); return $pos===false?trim($v):trim(substr($v,$pos+1)); };
-                                        $removeSuffix = function ($text,$suffix){ $len=strlen($suffix); return $len>0 &&
-                                        substr($text,-$len)===$suffix?substr($text,0,-$len):$text; };
-                                        $norm = function ($s){ $s=is_string($s)?trim($s):''; $s=preg_replace('/\s+/','
-                                        ',$s); return mb_strtolower($s); };
-                                        $getRefdis = function(array $r){ if (isset($r['refdis']) &&
-                                        is_numeric($r['refdis'])) return (int)$r['refdis'];
-                                        $ic=(string)($r['infrcl']??$r['infrcl_text']??''); $head=strtok($ic,'!~'); return
-                                        is_numeric($head)?(int)$head:null; };
-                                        $internalCodtous = array_map('strtoupper', config('itravex.internal_codtous',
-                                        ['LIB']));
+
 
                                         // 2) Packs solo si N>=2
                                         $packs = [];
@@ -1360,9 +1436,9 @@
                                         $rawRal = $r['codral'] ?? ($r['board'] ?? '');
                                         $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
 
-                                        $smoLabel = $afterHash($rawSmo);
-                                        $chaLabel = $afterHash($rawCha);
-                                        $ralLabel = $afterHash($rawRal);
+                                        $smoLabel = $cleanLabel($rawSmo);
+                                        $chaLabel = $cleanLabel($rawCha);
+                                        $ralLabel = $cleanLabel($rawRal);
 
                                         if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
                                         $parts = explode('!~', $infrcl);
@@ -1374,11 +1450,16 @@
 
                                         $roomParts = [];
                                         if ($smoLabel !== '') $roomParts[] = $smoLabel;
-                                        if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false) $roomParts[] =
-                                        $chaLabel;
+                                        if ($chaLabel !== '' && stripos($smoLabel, $chaLabel) === false)
+                                        $roomParts[] = $chaLabel;
 
                                         $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+
+                                        // ✅ Limpieza final del texto del tipo de habitación
+                                        $roomDesc = $cleanLabel($roomDesc);
+
                                         $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+
 
                                         $ref = $getRefdis($r);
                                         if (!is_int($ref) || $ref < 1 || $ref> $N) continue;
@@ -1418,26 +1499,7 @@
                                                         </span>
                                                     </summary>
 
-                                                    @php
-                                                    $roomsReq = request()->has('rooms') ? (array) request('rooms') : [];
-                                                    $roomsEffLocal = is_array($roomsEff ?? null) ? $roomsEff : $roomsReq;
-                                                    $requestedRoomsCount = max(0, (int) collect($roomsEffLocal)->count());
-                                                    $N = max(1, min(4, $requestedRoomsCount));
 
-                                                    $afterHash = function ($v) { if (!is_string($v) || $v==='') return '';
-                                                    $pos=strpos($v,'#'); return
-                                                    $pos===false?trim($v):trim(substr($v,$pos+1)); };
-                                                    $removeSuffix = function ($text,$suffix){ $len=strlen($suffix); return
-                                                    $len>0 && substr($text,-$len)===$suffix?substr($text,0,-$len):$text; };
-                                                    $norm = function ($s){ $s=is_string($s)?trim($s):'';
-                                                    $s=preg_replace('/\s+/',' ',$s); return mb_strtolower($s); };
-                                                    $getRefdis = function(array $r){ if (isset($r['refdis']) &&
-                                                    is_numeric($r['refdis'])) return (int)$r['refdis'];
-                                                    $ic=(string)($r['infrcl']??$r['infrcl_text']??'');
-                                                    $head=strtok($ic,'!~'); return is_numeric($head)?(int)$head:null; };
-                                                    $internalCodtous = array_map('strtoupper',
-                                                    config('itravex.internal_codtous', ['LIB']));
-                                                    @endphp
 
                                                     <ul class="space-y-2 mt-3">
                                                         @if ($N === 1)
@@ -1454,9 +1516,9 @@
                                                         $rawRal = $r['codral'] ?? ($r['board'] ?? '');
                                                         $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
 
-                                                        $smoLabel = $afterHash($rawSmo);
-                                                        $chaLabel = $afterHash($rawCha);
-                                                        $ralLabel = $afterHash($rawRal);
+                                                        $smoLabel = $cleanLabel($rawSmo);
+                                                        $chaLabel = $cleanLabel($rawCha);
+                                                        $ralLabel = $cleanLabel($rawRal);
 
                                                         if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
                                                         $parts = explode('!~', $infrcl);
@@ -1472,7 +1534,12 @@
                                                         $roomParts[] = $chaLabel;
 
                                                         $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+
+                                                        // ✅ Limpieza final del texto del tipo de habitación
+                                                        $roomDesc = $cleanLabel($roomDesc);
+
                                                         $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+
                                                         $price = (float) ($r['price_per_night'] ?? 0);
                                                         @endphp
 
@@ -1611,9 +1678,9 @@
                                                         $rawRal = $r['codral'] ?? ($r['board'] ?? '');
                                                         $infrcl = $r['infrcl'] ?? ($r['infrcl_text'] ?? '');
 
-                                                        $smoLabel = $afterHash($rawSmo);
-                                                        $chaLabel = $afterHash($rawCha);
-                                                        $ralLabel = $afterHash($rawRal);
+                                                        $smoLabel = $cleanLabel($rawSmo);
+                                                        $chaLabel = $cleanLabel($rawCha);
+                                                        $ralLabel = $cleanLabel($rawRal);
 
                                                         if ($chaLabel === '' && is_string($infrcl) && $infrcl !== '') {
                                                         $parts = explode('!~', $infrcl);
@@ -1629,7 +1696,12 @@
                                                         $roomParts[] = $chaLabel;
 
                                                         $roomDesc = count($roomParts) ? implode(' ', $roomParts) : '—';
+
+                                                        // ✅ Limpieza final del texto del tipo de habitación
+                                                        $roomDesc = $cleanLabel($roomDesc);
+
                                                         $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
+
 
                                                         $ref = $getRefdis($r);
                                                         if (!is_int($ref) || $ref < 1 || $ref> $N) continue;
@@ -1819,16 +1891,16 @@
                                     </p>
                                 </div>
                             </div>
-                        </div>
-                            @empty
-                            <div class="col-span-full text-center text-gray-500 text-lg mt-10">
-                                ❌ No se encontraron hoteles para los parámetros seleccionados.
-                            </div>
-                            @endforelse
             </div>
+            @empty
+            <div class="col-span-full text-center text-gray-500 text-lg mt-10">
+                ❌ No se encontraron hoteles para los parámetros seleccionados.
+            </div>
+            @endforelse
+        </div>
 
 
-            {{-- (SIN paginación abajo) --}}
+        {{-- (SIN paginación abajo) --}}
         </div>
         @if(!empty($firstPayload))
         <div id="xml-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
