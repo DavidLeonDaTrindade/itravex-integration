@@ -290,18 +290,43 @@
     // 2) Si hubiese "COD#Texto útil", quedarnos con el texto útil
     $pos = strpos($s, '#');
     if ($pos !== false) {
-        $s = trim(substr($s, $pos + 1));
+    $s = trim(substr($s, $pos + 1));
     }
 
-    // 3) ❗ Quitar códigos tipo AHD28079JP044316, 762414MPT2stpf..., etc.
-    //    Estos son secuencias largas alfanuméricas: las eliminamos si aparecen al final
-    $s = preg_replace('/\b[A-Z0-9]{8,}\b/u', '', $s);
+    // 3) Quitar códigos alfanuméricos largos
+    $s = preg_replace_callback('/\b[[:alnum:]]{8,}\b/u', function ($m) {
+    $token = $m[0];
+    // Si tiene dígitos O es muy largo (>=15 caracteres), lo tratamos como código
+    if (preg_match('/\d/', $token) || mb_strlen($token, 'UTF-8') >= 15) {
+    return '';
+    }
+    return $token;
+    }, $s);
 
-    // 4) Normalizar espacios
+    // 4) Normalizar espacios previos
     $s = preg_replace('/\s+/', ' ', $s);
+    $s = trim($s);
 
-    return trim($s);
-};
+    // 5) Quitar textos de “Non refundable”
+    $s = preg_replace(
+    '/[,.;\-]*\s*(non\s*refundable|non\-refundable|nonrefundable)\b/i',
+    '',
+    $s
+    );
+
+    // 6) Normalizar espacios otra vez por si queda doble espacio
+    $s = preg_replace('/\s+/', ' ', $s);
+    $s = trim($s);
+
+    // 7) (Opcional) Si viene TODO en mayúsculas, lo pasamos a Título
+    if ($s !== '' && mb_strtoupper($s, 'UTF-8') === $s) {
+    $s = mb_convert_case(mb_strtolower($s, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+    }
+
+    return $s;
+    };
+
+
 
 
 
@@ -310,55 +335,13 @@
     @endphp
 
     <style>
-        /* Badge amarilla para Contratos Propios */
-        .badge-contracts {
-            background: #FFF9E0;
-            color: #7A5800;
-            border-color: #FFD84D;
-        }
+        /* ===========================
+       UTILIDADES GENERALES
+    ============================ */
 
-        /* Resaltado de fila “Contratos Propios” */
-        .room-item.is-contracts {
-            position: relative;
-            background: #FFFDF4;
-            /* fondo amarillo muy suave */
-            border-color: #FFD84D;
-            /* borde dorado suave */
-            box-shadow: 0 4px 14px rgba(255, 204, 0, 0.25);
-        }
-
-        .room-item.is-contracts::before {
-            content: "";
-            position: absolute;
-            left: -1px;
-            top: -1px;
-            bottom: -1px;
-            width: 6px;
-            background: linear-gradient(180deg, #FFD84D 0%, #FFF0A3 100%);
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
-        }
-
-        /* Mini flag superior derecha */
-        .room-item .flag-contracts {
-            position: absolute;
-            top: -10px;
-            right: 12px;
-            background: #B7791F;
-            color: #fff;
-            padding: .2rem .5rem;
-            border-radius: .35rem;
-            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
-            letter-spacing: .02em;
-        }
-    </style>
-
-
-    <style>
         /* Fallback si Tailwind no está cargado */
         .hidden {
-            display: none !important
+            display: none !important;
         }
 
         .btn-sel {
@@ -416,8 +399,138 @@
                 transform: rotate(360deg)
             }
         }
-    </style>
-    <style>
+
+        .card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+        }
+
+        /* ===========================
+       LAYOUT DE CADA HABITACIÓN
+    ============================ */
+
+        .room-left {
+            min-width: 0;
+            flex: 1;
+        }
+
+        /* Bloque “Tipo / Régimen” en formato ficha */
+        .room-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .room-field {
+            display: flex;
+            flex-wrap: wrap;
+            column-gap: 4px;
+            row-gap: 2px;
+            align-items: baseline;
+        }
+
+        .room-field-label {
+            font: 600 .78rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            text-transform: none;
+            letter-spacing: .01em;
+            color: #0f172a;
+            white-space: nowrap;
+        }
+
+        .room-field-label::after {
+            content: " —";
+            margin-right: 2px;
+        }
+
+        .room-field-value {
+            font: 500 .9rem/1.2 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            color: #0f172a;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .room-item:hover {
+            background: #ffffff;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.10);
+            border-color: #cbd5e1;
+            transform: translateY(-1px);
+        }
+
+
+       
+
+        @media (max-width: 640px) {
+            .room-value {
+                white-space: normal;
+            }
+        }
+
+
+        .room-meta {
+            font: .875rem/1.35 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            color: #334155;
+        }
+
+        .room-right {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            white-space: nowrap;
+            margin-left: auto;
+        }
+
+        .room-price {
+            font-weight: 700;
+            color: #065f46;
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 640px) {
+            .room-item {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .room-right {
+                margin-left: auto;
+                width: 100%;
+                justify-content: flex-end;
+                margin-top: 8px;
+            }
+        }
+
+        /* ===========================
+       BADGES GENERALES
+    ============================ */
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            font: 700 .72rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            padding: .25rem .45rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            border: 1px solid rgba(0, 0, 0, .06);
+        }
+
+        /* Interna = dorado corporativo */
+        .badge-internal {
+            background: #FFF4D6;
+            color: #8A5A00;
+            border-color: #FDB31B;
+        }
+
+        /* Badge amarilla para Contratos Propios */
+        .badge-contracts {
+            background: #FFF9E0;
+            color: #7A5800;
+            border-color: #FFD84D;
+        }
+
         /* Badge azul para Channel */
         .badge-channel {
             background: #E8F1FF;
@@ -425,7 +538,79 @@
             border-color: #BBD4FF;
         }
 
-        /* Resaltado de fila “Channel” (similar a .is-internal) */
+        /* ===========================
+       RESALTADOS DE FILA
+    ============================ */
+
+        /* INTERNAS */
+        .room-item.is-internal {
+            position: relative;
+            background: #FFF9EC;
+            border-color: #FDB31B;
+            box-shadow: 0 4px 14px rgba(253, 179, 27, .28);
+        }
+
+        .room-item.is-internal::before {
+            content: "";
+            position: absolute;
+            left: -1px;
+            top: -1px;
+            bottom: -1px;
+            width: 6px;
+            background: linear-gradient(180deg, #FDB31B 0%, #FFC75A 100%);
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        .room-item .flag-internal {
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: #004665;
+            color: #fff;
+            padding: .2rem .5rem;
+            border-radius: .35rem;
+            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+            letter-spacing: .02em;
+        }
+
+        /* CONTRATOS PROPIOS */
+        .room-item.is-contracts {
+            position: relative;
+            background: #FFFDF4;
+            /* fondo amarillo muy suave */
+            border-color: #FFD84D;
+            /* borde dorado suave */
+            box-shadow: 0 4px 14px rgba(255, 204, 0, 0.25);
+        }
+
+        .room-item.is-contracts::before {
+            content: "";
+            position: absolute;
+            left: -1px;
+            top: -1px;
+            bottom: -1px;
+            width: 6px;
+            background: linear-gradient(180deg, #FFD84D 0%, #FFF0A3 100%);
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        .room-item .flag-contracts {
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: #B7791F;
+            color: #fff;
+            padding: .2rem .5rem;
+            border-radius: .35rem;
+            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+            letter-spacing: .02em;
+        }
+
+        /* CHANNEL */
         .room-item.is-channel {
             position: relative;
             background: #F4F8FF;
@@ -459,205 +644,16 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
             letter-spacing: .02em;
         }
-    </style>
 
-    <style>
-        /* Layout de cada fila de habitación (funciona con o sin Tailwind) */
-        .room-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-            background: #f8fafc;
-        }
+        /* ===========================
+       PACKS DE HABITACIONES
+    ============================ */
 
-        .room-left {
-            min-width: 0;
-        }
-
-        .room-title {
-            font: 600 .9rem/1.3 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            color: #0f172a;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-        }
-
-        .room-meta {
-            font: .875rem/1.35 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            color: #334155;
-        }
-
-        .room-right {
-            display: flex;
-            align-items: center;
-            gap: .75rem;
-            white-space: nowrap;
-            margin-left: auto;
-        }
-
-        .room-price {
-            font-weight: 700;
-            color: #065f46;
-        }
-
-        /* Responsive: en móviles alinea arriba sin “saltar” */
-        @media (max-width: 640px) {
-            .room-item {
-                align-items: flex-start;
-            }
-
-            .room-right {
-                margin-left: auto;
-            }
-        }
-
-        .card {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 1rem;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
-        }
-    </style>
-    <style>
-        /* Etiquetas/badges */
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: .35rem;
-            font: 700 .72rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            padding: .25rem .45rem;
-            border-radius: .5rem;
-            white-space: nowrap;
-            border: 1px solid rgba(0, 0, 0, .06);
-        }
-
-        /* Interna = dorado corporativo */
-        .badge-internal {
-            background: #FFF4D6;
-            color: #8A5A00;
-            border-color: #FDB31B;
-        }
-
-        /* Resaltado de la fila de habitación interna */
-        .room-item.is-internal {
-            position: relative;
-            background: #FFF9EC;
-            /* fondo cálido */
-            border-color: #FDB31B;
-            /* borde dorado */
-            box-shadow: 0 4px 14px rgba(253, 179, 27, .28);
-        }
-
-        /* Barra lateral izquierda como acento */
-        .room-item.is-internal::before {
-            content: "";
-            position: absolute;
-            left: -1px;
-            top: -1px;
-            bottom: -1px;
-            width: 6px;
-            background: linear-gradient(180deg, #FDB31B 0%, #FFC75A 100%);
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
-        }
-
-        /* Mini etiqueta “INTERNAL” arriba a la derecha */
-        .room-item.is-internal .flag-internal {
-            position: absolute;
-            top: -10px;
-            right: 12px;
-            background: #004665;
-            color: #fff;
-            padding: .2rem .5rem;
-            border-radius: .35rem;
-            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
-            letter-spacing: .02em;
-        }
-    </style>
-    <style>
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: .35rem;
-            font: 700 .72rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            padding: .25rem .45rem;
-            border-radius: .5rem;
-            white-space: nowrap;
-            border: 1px solid rgba(0, 0, 0, .06);
-        }
-
-        .badge-internal {
-            background: #FFF4D6;
-            color: #8A5A00;
-            border-color: #FDB31B;
-        }
-    </style>
-
-    <style>
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: .35rem;
-            font: 700 .72rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            padding: .25rem .45rem;
-            border-radius: .5rem;
-            white-space: nowrap;
-            border: 1px solid rgba(0, 0, 0, .06);
-        }
-
-        .badge-internal {
-            background: #FFF4D6;
-            color: #8A5A00;
-            border-color: #FDB31B;
-        }
-
-        .room-item.is-internal {
-            position: relative;
-            background: #FFF9EC;
-            border-color: #FDB31B;
-            box-shadow: 0 4px 14px rgba(253, 179, 27, .28);
-        }
-
-        .room-item.is-internal::before {
-            content: "";
-            position: absolute;
-            left: -1px;
-            top: -1px;
-            bottom: -1px;
-            width: 6px;
-            background: linear-gradient(180deg, #FDB31B 0%, #FFC75A 100%);
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
-        }
-
-        .room-item.is-internal .flag-internal {
-            position: absolute;
-            top: -10px;
-            right: 12px;
-            background: #004665;
-            color: #fff;
-            padding: .2rem .5rem;
-            border-radius: .35rem;
-            font: 700 .68rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
-            letter-spacing: .02em;
-        }
-    </style>
-    <style>
-        /* === Packs de habitaciones: mejoras de legibilidad === */
         .room-pack .desc,
         .room-pack .desc * {
             white-space: normal;
-            /* sin saltos raros */
             word-break: normal;
-            /* NO cortar palabra a palabra */
             overflow-wrap: anywhere;
-            /* permitir cortar sólo si es necesario */
         }
 
         .room-pack .mono {
@@ -1549,30 +1545,32 @@
                                                             @if($isChannel)<span class="flag-channel">CHANNEL</span>@endif
 
                                                             <div class="room-left">
-                                                                <p class="room-title"><span
-                                                                        class="font-semibold text-slate-700">Tipo —</span>
-                                                                    {{ $roomDesc }}
-                                                                </p>
-                                                                <p class="room-title"><span
-                                                                        class="font-semibold text-slate-700">Régimen
-                                                                        —</span> {{ $boardDesc }}</p>
+                                                                <div class="room-fields">
+                                                                    <div class="room-field">
+                                                                        <div class="room-field-label">Tipo</div>
+                                                                        <div class="room-field-value">{{ $roomDesc }}</div>
+                                                                    </div>
+
+                                                                    <div class="room-field">
+                                                                        <div class="room-field-label">Régimen</div>
+                                                                        <div class="room-field-value">{{ $boardDesc }}</div>
+                                                                    </div>
+                                                                </div>
+
                                                                 @if(!empty($codtou))
                                                                 <p class="mt-1 text-xs text-slate-600">
                                                                     🏷️ Proveedor:
-                                                                    <span
-                                                                        class="font-semibold text-slate-800">{{ $provLabel($codtou) }}</span>
-
+                                                                    <span class="font-semibold text-slate-800">{{ $provLabel($codtou) }}</span>
                                                                     @if($isInternal)
                                                                     <span class="badge badge-internal ml-2">Interna</span>
                                                                     @endif
-
                                                                     @if($isChannel)
                                                                     <span class="badge badge-channel ml-2">Channel</span>
                                                                     @endif
                                                                 </p>
-
                                                                 @endif
                                                             </div>
+
 
                                                             <div class="room-right">
                                                                 <div class="room-price">{{ number_format($price, 2) }}
