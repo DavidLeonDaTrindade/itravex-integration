@@ -618,12 +618,13 @@
             border-color: #BBD4FF;
             /* borde azul */
             box-shadow: 0 4px 14px rgba(30, 94, 255, .18);
+            padding-left: 10px;
         }
 
         .room-item.is-channel::before {
             content: "";
             position: absolute;
-            left: -1px;
+            left: 0px;
             top: -1px;
             bottom: -1px;
             width: 6px;
@@ -1539,8 +1540,7 @@
                                                         $price = (float) ($r['price_per_night'] ?? 0);
                                                         @endphp
 
-                                                        <li
-                                                            class="room-item {{ $isInternal ? 'is-internal' : '' }} {{ $isChannel ? 'is-channel' : '' }}">
+                                                        <li class="room-item {{ $isInternal ? 'is-internal' : '' }} {{ $isChannel ? 'is-channel' : '' }}">
                                                             @if($isInternal)<span class="flag-internal">INTERNA</span>@endif
                                                             @if($isChannel)<span class="flag-channel">CHANNEL</span>@endif
 
