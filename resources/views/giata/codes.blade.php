@@ -4,7 +4,9 @@
     <div class="mx-auto max-w-7xl">
       <div class="mb-6">
         <h1 class="text-2xl font-semibold text-slate-900">GIATA – Códigos por hotel</h1>
-        <p class="text-slate-600 text-sm mt-1">Busca por nombre de hotel, GIATA ID, código de proveedor o provider_code.</p>
+        <p class="text-slate-600 text-sm mt-1">
+          Busca por nombre de hotel, GIATA ID, código de proveedor o provider_code.
+        </p>
       </div>
 
       <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -12,35 +14,54 @@
           <!-- Fila 1: búsqueda global + por página -->
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div class="flex items-center gap-2 w-full md:w-[420px]">
-              <input id="q" type="text" placeholder="Buscar… (ej. Hurghada, 25, 35200, itravex)"
+              <input id="q" type="text"
+                     placeholder="Buscar… (ej. Hurghada, 25, 35200, itravex)"
                      class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
               <button id="btnSearch"
-                      class="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Buscar</button>
+                      class="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+                Buscar
+              </button>
             </div>
+
             <div class="flex items-center gap-2">
               <label class="text-sm text-slate-600">Por página</label>
               <select id="perPage" class="rounded-md border border-slate-300 px-2 py-2 text-sm">
-                <option>25</option><option>50</option><option>100</option>
+                <option>25</option>
+                <option>50</option>
+                <option>100</option>
               </select>
             </div>
           </div>
 
-          <!-- Fila 2: comparador de proveedores A/B -->
+          <!-- Fila 2: selección de proveedores (hasta 10) -->
           <div class="flex flex-col md:flex-row items-start md:items-center gap-3">
-            <div class="flex items-center gap-2">
-              <label class="text-sm text-slate-600 w-32">Comparar A</label>
-              <input id="provA" list="provList" placeholder="p. ej. itravex"
-                     class="rounded-md border border-slate-300 px-3 py-2 text-sm w-56" />
-              <button id="clearA" class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">Limpiar</button>
+            <div class="flex flex-col gap-1 w-full md:w-auto">
+              <div class="flex items-center gap-2">
+                <label class="text-sm text-slate-600 whitespace-nowrap">
+                  Proveedores (máx. 10)
+                </label>
+                <input id="provMulti"
+                       list="provList"
+                       placeholder="Ej: itravex, hotelbeds..."
+                       class="flex-1 min-w-[260px] rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <button id="clearProv"
+                        class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
+                  Limpiar
+                </button>
+              </div>
+              <div id="provSelected"
+                   class="text-xs text-slate-600">
+                <!-- Aquí mostraremos los seleccionados -->
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <label class="text-sm text-slate-600 w-32 md:w-24">vs B</label>
-              <input id="provB" list="provList" placeholder="p. ej. hotelbeds"
-                     class="rounded-md border border-slate-300 px-3 py-2 text-sm w-56" />
-              <button id="clearB" class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">Limpiar</button>
+
+            <div class="text-xs text-slate-500">
+              Selecciona hasta 10 <code>provider_code</code>.
+              Si lo dejas vacío, se mostrarán solo proveedores con datos en la página
+              (itravex primero si aplica).
             </div>
-            <div class="text-xs text-slate-500">Si dejas ambos vacíos, se muestran solo proveedores con datos (itravex primero si aplica).</div>
           </div>
+
           <datalist id="provList"></datalist>
         </div>
 
@@ -49,18 +70,29 @@
             <thead>
               <tr class="bg-slate-50">
                 <th class="sticky left-0 z-10 bg-slate-50 text-left p-3 border-b">Hotel (GIATA)</th>
-                <th id="providersLoading" class="p-3 border-b text-left text-slate-400">Cargando proveedores…</th>
+                <th id="providersLoading" class="p-3 border-b text-left text-slate-400">
+                  Cargando proveedores…
+                </th>
               </tr>
             </thead>
             <tbody id="rowsBody">
-              <tr><td class="p-4 text-slate-500" colspan="99">Cargando…</td></tr>
+              <tr>
+                <td class="p-4 text-slate-500" colspan="99">Cargando…</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
         <div class="mt-4 flex items-center justify-between text-sm">
           <div id="metaText" class="text-slate-600">—</div>
+
           <div class="flex gap-2">
+            <!-- Botón de exportación -->
+            <button id="btnExport"
+                    class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
+              Exportar Excel
+            </button>
+
             <button id="prevBtn" class="px-3 py-1 border rounded disabled:opacity-50">Anterior</button>
             <button id="nextBtn" class="px-3 py-1 border rounded disabled:opacity-50">Siguiente</button>
           </div>
@@ -71,9 +103,9 @@
 
   <script>
     (function () {
-      const qs  = (s, el=document) => el.querySelector(s);
-      const qsa = (s, el=document) => Array.from(el.querySelectorAll(s));
-      const apiUrl  = "{{ url('/giata/codes') }}"; // JSON
+      const qs  = (s, el = document) => el.querySelector(s);
+      const qsa = (s, el = document) => Array.from(el.querySelectorAll(s));
+      const apiUrl = "{{ url('/giata/codes') }}"; // JSON
 
       const q       = qs('#q');
       const btn     = qs('#btnSearch');
@@ -82,42 +114,57 @@
       const metaEl  = qs('#metaText');
       const prevBtn = qs('#prevBtn');
       const nextBtn = qs('#nextBtn');
+      const btnExport = qs('#btnExport');
 
-      const provA   = qs('#provA');
-      const provB   = qs('#provB');
-      const clearA  = qs('#clearA');
-      const clearB  = qs('#clearB');
-      const provList= qs('#provList');
+      const provMulti    = qs('#provMulti');
+      const clearProv    = qs('#clearProv');
+      const provList     = qs('#provList');
+      const provSelected = qs('#provSelected');
 
       let allProviders = []; // lista completa (cache)
       let providers    = []; // columnas activas (filtradas)
-      let page = 1;
+      let page         = 1;
 
-      // --- Helpers UI/parse ---
+      // cache de filas de la página actual
+      let lastRows     = [];
+
+      // lista real de provider_code seleccionados (estado)
+      let selectedCodes = [];
+
+      // ==========================
+      // Helpers UI/parse
+      // ==========================
       const splitCodes = (raw) =>
         String(raw).split('|').map(s => s.trim()).filter(Boolean);
 
       function createCodeCell(rawValue) {
         const td = document.createElement('td');
         td.className = 'p-3 border-b align-top whitespace-nowrap';
+
         if (!rawValue || String(rawValue).trim() === '—') {
           td.innerHTML = '<span class="text-slate-400">—</span>';
           return td;
         }
+
         const codes = splitCodes(rawValue);
-        if (codes.length <= 1) { td.textContent = codes[0]; return td; }
+        if (codes.length <= 1) {
+          td.textContent = codes[0];
+          return td;
+        }
 
         const main = document.createElement('span');
         main.textContent = codes[0];
 
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'ml-2 inline-flex items-center rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-50';
+        btn.className =
+          'ml-2 inline-flex items-center rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-50';
         btn.setAttribute('aria-expanded', 'false');
         btn.textContent = `+${codes.length - 1}`;
 
         const menu = document.createElement('div');
-        menu.className = 'hidden mt-1 absolute z-20 rounded-md border border-slate-200 bg-white shadow-sm';
+        menu.className =
+          'hidden mt-1 absolute z-20 rounded-md border border-slate-200 bg-white shadow-sm';
         menu.style.minWidth = '14rem';
         menu.setAttribute('data-gcodes-menu', '1');
 
@@ -141,11 +188,20 @@
           e.stopPropagation();
           document.querySelectorAll('[data-gcodes-menu]').forEach(m => m.classList.add('hidden'));
           const open = menu.classList.contains('hidden');
-          if (open) { menu.classList.remove('hidden'); btn.setAttribute('aria-expanded','true'); }
-          else { menu.classList.add('hidden'); btn.setAttribute('aria-expanded','false'); }
+          if (open) {
+            menu.classList.remove('hidden');
+            btn.setAttribute('aria-expanded', 'true');
+          } else {
+            menu.classList.add('hidden');
+            btn.setAttribute('aria-expanded', 'false');
+          }
         });
+
         document.addEventListener('click', () => {
-          if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded','false'); }
+          if (!menu.classList.contains('hidden')) {
+            menu.classList.add('hidden');
+            btn.setAttribute('aria-expanded', 'false');
+          }
         });
 
         td.appendChild(wrap);
@@ -166,15 +222,18 @@
       const renderRows = (rows) => {
         rowsEl.innerHTML = '';
         if (!rows.length) {
-          rowsEl.innerHTML = '<tr><td class="p-4 text-slate-500" colspan="99">Sin resultados</td></tr>';
+          rowsEl.innerHTML =
+            '<tr><td class="p-4 text-slate-500" colspan="99">Sin resultados</td></tr>';
           return;
         }
+
         rows.forEach(r => {
           const tr = document.createElement('tr');
           tr.className = 'odd:bg-white even:bg-slate-50';
 
           const tdHotel = document.createElement('td');
-          tdHotel.className = 'sticky left-0 z-10 bg-inherit p-3 border-b align-top';
+          tdHotel.className =
+            'sticky left-0 z-10 bg-inherit p-3 border-b align-top';
           tdHotel.innerHTML = `
             <div class="font-medium">${r.hotel_name ?? '—'}</div>
             <div class="text-xs text-slate-500">GIATA #${r.giata_id}</div>
@@ -192,38 +251,80 @@
       };
 
       const setLoading = () => {
-        rowsEl.innerHTML = '<tr><td class="p-4 text-slate-500" colspan="99">Cargando…</td></tr>';
+        rowsEl.innerHTML =
+          '<tr><td class="p-4 text-slate-500" colspan="99">Cargando…</td></tr>';
       };
 
       // Helpers para selección de proveedores por código (case-insensitive)
-      const codeEq = (a,b) => String(a||'').toLowerCase() === String(b||'').toLowerCase();
-      const byCode  = (code) => allProviders.find(p => codeEq(p.provider_code, code));
+      const codeEq = (a, b) =>
+        String(a || '').toLowerCase() === String(b || '').toLowerCase();
+      const byCode = (code) =>
+        allProviders.find(p => codeEq(p.provider_code, code));
 
+      // Devuelve los objetos proveedor a partir de selectedCodes
       const getSelectedProviders = () => {
-        const sel = [];
-        const a = provA.value.trim();
-        const b = provB.value.trim();
-        if (a) { const pa = byCode(a); if (pa) sel.push(pa); }
-        if (b && !codeEq(a,b)) { const pb = byCode(b); if (pb) sel.push(pb); }
-        return sel;
+        const lower = selectedCodes.map(c => String(c).toLowerCase());
+        return allProviders.filter(p =>
+          lower.includes(String(p.provider_code || '').toLowerCase())
+        );
+      };
+
+      // Pinta debajo del input los códigos seleccionados
+      const renderSelectedCodes = () => {
+        if (!selectedCodes.length) {
+          provSelected.textContent = 'Sin proveedores seleccionados.';
+          return;
+        }
+        provSelected.textContent = `Seleccionados: ${selectedCodes.join(', ')}`;
+      };
+
+      // Mete en selectedCodes (máx. 10) los códigos que haya en el input
+      const commitInputProviders = () => {
+        const raw = provMulti.value || '';
+        const tokens = raw
+          .split(/[,\s]+/)
+          .map(c => c.trim())
+          .filter(Boolean);
+
+        let changed = false;
+
+        for (const token of tokens) {
+          const prov = byCode(token);
+          if (!prov) continue;
+
+          const code = prov.provider_code || '';
+          const lc   = code.toLowerCase();
+          const already = selectedCodes.some(c => c.toLowerCase() === lc);
+          if (!already && selectedCodes.length < 10) {
+            selectedCodes.push(code);
+            changed = true;
+          }
+        }
+
+        // Dejamos el input vacío para que el datalist vuelva a funcionar perfecto
+        provMulti.value = '';
+
+        if (changed) {
+          renderSelectedCodes();
+        }
       };
 
       const fillProviderDatalist = () => {
         provList.innerHTML = '';
         allProviders.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.provider_code;
-          opt.label = p.name || p.provider_code;
+          const opt   = document.createElement('option');
+          opt.value   = p.provider_code;
+          opt.label   = p.name || p.provider_code;
           provList.appendChild(opt);
         });
       };
 
       const filterProvidersWithData = (rows) => {
-        // Si hay selección A/B, forzamos esas columnas (aunque no tengan datos)
+        // 1) Si el usuario ha seleccionado proveedores, respetamos su selección.
         const selected = getSelectedProviders();
         if (selected.length) return selected;
 
-        // Si no hay selección, mostramos solo proveedores con datos en la página
+        // 2) Si no hay selección, mostramos solo proveedores con datos en la página.
         const used = new Set();
         rows.forEach(r => {
           if (!r.codes) return;
@@ -231,11 +332,17 @@
             if (val && String(val).trim() !== '') used.add(Number(pid));
           });
         });
+
         let filtered = allProviders.filter(p => used.has(p.id));
 
-        // Poner 'itravex' primero si está en la lista filtrada
-        const itxIdx = filtered.findIndex(p => (p.provider_code || '').toLowerCase() === 'itravex');
-        if (itxIdx > 0) { const [itx] = filtered.splice(itxIdx, 1); filtered.unshift(itx); }
+        // Poner 'itravex' primero si está
+        const itxIdx = filtered.findIndex(
+          p => (p.provider_code || '').toLowerCase() === 'itravex'
+        );
+        if (itxIdx > 0) {
+          const [itx] = filtered.splice(itxIdx, 1);
+          filtered.unshift(itx);
+        }
 
         return filtered;
       };
@@ -247,7 +354,9 @@
         params.set('per_page', perSel.value);
         params.set('page', page);
 
-        const res  = await fetch(`${apiUrl}?${params.toString()}`, { headers: { 'Accept': 'application/json' }});
+        const res  = await fetch(`${apiUrl}?${params.toString()}`, {
+          headers: { 'Accept': 'application/json' }
+        });
         const json = await res.json();
 
         if (!allProviders.length && Array.isArray(json.providers)) {
@@ -256,35 +365,138 @@
         }
 
         const rows = json.data || [];
+        lastRows = rows;
+
         providers = filterProvidersWithData(rows);
         renderProvidersHeader();
         renderRows(rows);
 
-        const m = json.meta || { current_page: 1, last_page: 1, total: 0, per_page: perSel.value };
+        const m = json.meta || {
+          current_page: 1,
+          last_page: 1,
+          total: 0,
+          per_page: perSel.value
+        };
+
         page = m.current_page;
 
-        metaEl.textContent = `Página ${m.current_page} de ${m.last_page} · ${m.total} resultados`;
+        metaEl.textContent =
+          `Página ${m.current_page} de ${m.last_page} · ${m.total} resultados`;
         prevBtn.disabled = (page <= 1);
         nextBtn.disabled = (page >= m.last_page);
       };
 
-      // Eventos
-      btn.addEventListener('click', () => { page = 1; fetchPage(); });
-      perSel.addEventListener('change', () => { page = 1; fetchPage(); });
-      q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { page = 1; fetchPage(); }});
-      prevBtn.addEventListener('click', () => { if (page > 1) { page--; fetchPage(); }});
-      nextBtn.addEventListener('click', () => { page++; fetchPage(); });
+      // --- Exportar tabla actual a CSV (Excel) ---
+      function exportCurrentTableToCsv() {
+        if (!lastRows.length || !providers.length) {
+          alert('No hay datos que exportar.');
+          return;
+        }
 
-      // Comparador A/B: al cambiar, recarga con mismas filas pero nuevas columnas
-      const onCompareChange = () => { page = 1; fetchPage(); };
-      provA.addEventListener('change', onCompareChange);
-      provB.addEventListener('change', onCompareChange);
-      provA.addEventListener('keydown', e => { if (e.key === 'Enter') onCompareChange(); });
-      provB.addEventListener('keydown', e => { if (e.key === 'Enter') onCompareChange(); });
-      clearA.addEventListener('click', () => { provA.value=''; onCompareChange(); });
-      clearB.addEventListener('click', () => { provB.value=''; onCompareChange(); });
+        // Cabecera
+        const header = [
+          'Hotel',
+          'GIATA ID',
+          ...providers.map(p => p.name || p.provider_code || '')
+        ];
+
+        const dataRows = lastRows.map(r => {
+          const row = [
+            r.hotel_name ?? '',
+            r.giata_id ?? ''
+          ];
+
+          providers.forEach(p => {
+            const value = (r.codes && r.codes[p.id]) ? String(r.codes[p.id]) : '';
+            row.push(value.replace(/\s+/g, ' '));
+          });
+
+          return row;
+        });
+
+        const allRows = [header, ...dataRows];
+
+        const csv = allRows
+          .map(cols =>
+            cols
+              .map(v => `"${String(v).replace(/"/g, '""')}"`)
+              .join(';')
+          )
+          .join('\r\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `giata_codes_page_${page}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      // Eventos básicos búsqueda/paginación
+      btn.addEventListener('click', () => {
+        page = 1;
+        fetchPage();
+      });
+
+      perSel.addEventListener('change', () => {
+        page = 1;
+        fetchPage();
+      });
+
+      q.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          page = 1;
+          fetchPage();
+        }
+      });
+
+      prevBtn.addEventListener('click', () => {
+        if (page > 1) {
+          page--;
+          fetchPage();
+        }
+      });
+
+      nextBtn.addEventListener('click', () => {
+        page++;
+        fetchPage();
+      });
+
+      const onCompareChange = () => {
+        page = 1;
+        fetchPage();
+      };
+
+      // Selección de proveedores:
+      provMulti.addEventListener('change', () => {
+        commitInputProviders();
+        onCompareChange();
+      });
+
+      provMulti.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitInputProviders();
+          onCompareChange();
+        }
+      });
+
+      clearProv.addEventListener('click', () => {
+        selectedCodes = [];
+        provMulti.value = '';
+        renderSelectedCodes();
+        onCompareChange();
+      });
+
+      // Exportar
+      btnExport.addEventListener('click', exportCurrentTableToCsv);
 
       // Init
+      renderSelectedCodes();
       fetchPage();
     })();
   </script>
