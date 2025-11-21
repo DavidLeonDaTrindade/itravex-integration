@@ -68,4 +68,21 @@ class GiataCodesController extends Controller
         // Vista que consume el JSON de /giata/codes
         return view('giata.codes');
     }
+    public function hotelSuggest(Request $request)
+    {
+        $term = trim((string)$request->query('q', ''));
+
+        if (strlen($term) < 2) {
+            return response()->json([]); // para evitar cargas innecesarias
+        }
+
+        $rows = \DB::table('hotels')
+            ->select('codser', 'name')
+            ->where('name', 'like', "%{$term}%")
+            ->orderBy('name')
+            ->limit(25)
+            ->get();
+
+        return response()->json($rows);
+    }
 }

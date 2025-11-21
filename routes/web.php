@@ -136,6 +136,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/giata/codes/browser', [GiataCodesController::class, 'browser'])
         ->name('giata.codes.browser');
+
+    Route::get('/giata/hotels-suggest', [GiataCodesController::class, 'hotelSuggest']);
 });
 
 require __DIR__ . '/auth.php';

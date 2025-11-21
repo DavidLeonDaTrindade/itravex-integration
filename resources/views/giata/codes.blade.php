@@ -11,16 +11,24 @@
 
       <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div class="flex flex-col gap-3">
-          <!-- Fila 1: búsqueda global + por página -->
+          <!-- Fila 1: búsqueda por hotel + por página -->
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div class="flex items-center gap-2 w-full md:w-[420px]">
-              <input id="q" type="text"
-                     placeholder="Buscar… (ej. Hurghada, 25, 35200, itravex)"
-                     class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
-              <button id="btnSearch"
-                      class="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
-                Buscar
-              </button>
+            <div class="flex flex-col gap-2 w-full md:w-[420px]">
+              <!-- Autocompletado de hoteles (tabla hotels) -->
+              <div class="flex items-center gap-2">
+                <input id="hotelSearch"
+                       list="hotelList"
+                       placeholder="Buscar hotel (nombre, etc.)…"
+                       class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
+                <button id="clearHotel"
+                        class="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
+                  Limpiar
+                </button>
+              </div>
+              <small class="text-[11px] text-slate-500">
+                Escribe al menos 3 letras para ver sugerencias desde la tabla <code>hotels</code>.
+                Puedes pulsar Enter o elegir una sugerencia para lanzar la búsqueda GIATA.
+              </small>
             </div>
 
             <div class="flex items-center gap-2">
@@ -56,13 +64,14 @@
             </div>
 
             <div class="text-xs text-slate-500">
-              Selecciona hasta 10 <code>provider_code</code>.
+              Selecciona hasta 10 <code>provider_code</code>.<br>
               Si lo dejas vacío, se mostrarán solo proveedores con datos en la página
               (itravex primero si aplica).
             </div>
           </div>
 
           <datalist id="provList"></datalist>
+          <datalist id="hotelList"></datalist>
         </div>
 
         <div class="mt-4 overflow-auto">
@@ -105,21 +114,25 @@
     (function () {
       const qs  = (s, el = document) => el.querySelector(s);
       const qsa = (s, el = document) => Array.from(el.querySelectorAll(s));
-      const apiUrl = "{{ url('/giata/codes') }}"; // JSON
 
-      const q       = qs('#q');
-      const btn     = qs('#btnSearch');
-      const perSel  = qs('#perPage');
-      const rowsEl  = qs('#rowsBody');
-      const metaEl  = qs('#metaText');
-      const prevBtn = qs('#prevBtn');
-      const nextBtn = qs('#nextBtn');
+      const apiUrl        = "{{ url('/giata/codes') }}";           // JSON GIATA
+      const hotelsApiUrl  = "{{ url('/giata/hotels-suggest') }}";  // JSON hoteles (tabla hotels)
+
+      const perSel    = qs('#perPage');
+      const rowsEl    = qs('#rowsBody');
+      const metaEl    = qs('#metaText');
+      const prevBtn   = qs('#prevBtn');
+      const nextBtn   = qs('#nextBtn');
       const btnExport = qs('#btnExport');
 
       const provMulti    = qs('#provMulti');
       const clearProv    = qs('#clearProv');
       const provList     = qs('#provList');
       const provSelected = qs('#provSelected');
+
+      const hotelSearch  = qs('#hotelSearch');
+      const clearHotel   = qs('#clearHotel');
+      const hotelList    = qs('#hotelList');
 
       let allProviders = []; // lista completa (cache)
       let providers    = []; // columnas activas (filtradas)
@@ -255,7 +268,7 @@
           '<tr><td class="p-4 text-slate-500" colspan="99">Cargando…</td></tr>';
       };
 
-      // Helpers para selección de proveedores por código (case-insensitive)
+      // Helpers selección proveedores
       const codeEq = (a, b) =>
         String(a || '').toLowerCase() === String(b || '').toLowerCase();
       const byCode = (code) =>
@@ -312,9 +325,9 @@
       const fillProviderDatalist = () => {
         provList.innerHTML = '';
         allProviders.forEach(p => {
-          const opt   = document.createElement('option');
-          opt.value   = p.provider_code;
-          opt.label   = p.name || p.provider_code;
+          const opt = document.createElement('option');
+          opt.value = p.provider_code;
+          opt.label = p.name || p.provider_code;
           provList.appendChild(opt);
         });
       };
@@ -350,7 +363,10 @@
       const fetchPage = async () => {
         setLoading();
         const params = new URLSearchParams();
-        if (q.value.trim()) params.set('q', q.value.trim());
+
+        const term = (hotelSearch.value || '').trim();
+        if (term) params.set('q', term);
+
         params.set('per_page', perSel.value);
         params.set('page', page);
 
@@ -436,22 +452,83 @@
         URL.revokeObjectURL(url);
       }
 
-      // Eventos básicos búsqueda/paginación
-      btn.addEventListener('click', () => {
+      // ======================
+      // Autocomplete hoteles
+      // ======================
+      let hotelAbortController = null;
+
+      async function fetchHotelSuggestions(term) {
+        if (term.length < 3) {
+          hotelList.innerHTML = '';
+          return;
+        }
+
+        // Cancelar petición anterior
+        if (hotelAbortController) {
+          hotelAbortController.abort();
+        }
+        hotelAbortController = new AbortController();
+
+        try {
+          const params = new URLSearchParams({ q: term });
+          const res = await fetch(`${hotelsApiUrl}?${params.toString()}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: hotelAbortController.signal,
+          });
+          if (!res.ok) return;
+
+          const data = await res.json();
+          hotelList.innerHTML = '';
+
+          data.forEach(h => {
+            const opt = document.createElement('option');
+            opt.value = h.name || '';
+            opt.label = `${h.name || ''} (codser: ${h.codser || ''})`;
+            hotelList.appendChild(opt);
+          });
+        } catch (e) {
+          // ignorar aborts
+        }
+      }
+
+      // Cuando el usuario escribe en el buscador de hoteles
+      hotelSearch.addEventListener('input', (e) => {
+        const term = e.target.value || '';
+        fetchHotelSuggestions(term);
+      });
+
+      // Cuando selecciona un hotel del datalist o pulsa Enter
+      function applyHotelSelection() {
+        const name = (hotelSearch.value || '').trim();
+        if (!name) return;
+        page = 1;
+        fetchPage();
+      }
+
+      hotelSearch.addEventListener('change', () => {
+        applyHotelSelection();
+      });
+
+      hotelSearch.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyHotelSelection();
+        }
+      });
+
+      clearHotel.addEventListener('click', () => {
+        hotelSearch.value = '';
+        hotelList.innerHTML = '';
         page = 1;
         fetchPage();
       });
 
+      // ======================
+      // Eventos básicos paginación
+      // ======================
       perSel.addEventListener('change', () => {
         page = 1;
         fetchPage();
-      });
-
-      q.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          page = 1;
-          fetchPage();
-        }
       });
 
       prevBtn.addEventListener('click', () => {
