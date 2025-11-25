@@ -15,6 +15,7 @@ use App\Models\Zone;
 use App\Http\Controllers\HotelSearchController;
 use App\Http\Controllers\GiataProviderController;
 use App\Http\Controllers\GiataCodesController;
+use App\Http\Controllers\GiataPropertyRawController;
 
 
 
@@ -138,6 +139,22 @@ Route::middleware(['auth'])->group(function () {
         ->name('giata.codes.browser');
 
     Route::get('/giata/hotels-suggest', [GiataCodesController::class, 'hotelSuggest']);
+
+
+    Route::get('/giata/properties-raw', [GiataPropertyRawController::class, 'index'])
+        ->name('giata.properties.raw.index');
+
+    Route::get('/giata/properties-raw/cities', [GiataPropertyRawController::class, 'citySuggestions'])
+        ->name('giata.properties.raw.cities');
+
+    Route::get('/giata/properties-raw/names', [GiataPropertyRawController::class, 'nameSuggestions'])
+        ->name('giata.properties.raw.names');
+
+    Route::get('/giata/properties-raw', [GiataPropertyRawController::class, 'index'])
+        ->name('giata.properties.raw.index');
+
+    Route::get('/giata/properties-raw/export', [GiataPropertyRawController::class, 'export'])
+        ->name('giata.properties.raw.export');
 });
 
 require __DIR__ . '/auth.php';

@@ -6,3 +6,4 @@
 .env
 public/hot
 public/storage
+backups/
