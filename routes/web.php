@@ -16,6 +16,8 @@ use App\Http\Controllers\HotelSearchController;
 use App\Http\Controllers\GiataProviderController;
 use App\Http\Controllers\GiataCodesController;
 use App\Http\Controllers\GiataPropertyRawController;
+use App\Http\Controllers\GiataCodesBrowserController;
+
 
 
 
@@ -155,6 +157,14 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/giata/properties-raw/export', [GiataPropertyRawController::class, 'export'])
         ->name('giata.properties.raw.export');
+
+
+
+    Route::get('/giata/codes-browser', [GiataCodesBrowserController::class, 'index'])
+        ->name('giata.codes.browser');
+
+    Route::post('/giata/codes/upload-giata', [GiataCodesBrowserController::class, 'uploadGiata'])
+        ->name('giata.codes.uploadGiata');
 });
 
 require __DIR__ . '/auth.php';

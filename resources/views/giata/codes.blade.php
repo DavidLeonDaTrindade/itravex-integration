@@ -10,18 +10,37 @@
       </div>
 
       <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+
+        {{-- Mensaje de éxito al cargar GIATA --}}
+        @if (session('status'))
+        <div class="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+          {{ session('status') }}
+        </div>
+        @endif
+
+        {{-- Errores (por ejemplo del XLSX) --}}
+        @if ($errors->any())
+        <div class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <ul class="list-disc list-inside space-y-1">
+            @foreach ($errors->all() as $error)
+            <li>{{ $error }}</li>
+            @endforeach
+          </ul>
+        </div>
+        @endif
+
         <div class="flex flex-col gap-3">
-          <!-- Fila 1: búsqueda por hotel + por página -->
+          {{-- Fila 1: búsqueda por hotel + por página --}}
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div class="flex flex-col gap-2 w-full md:w-[420px]">
-              <!-- Autocompletado de hoteles (tabla hotels) -->
+              {{-- Autocompletado de hoteles (tabla hotels) --}}
               <div class="flex items-center gap-2">
                 <input id="hotelSearch"
-                       list="hotelList"
-                       placeholder="Buscar hotel (nombre, etc.)…"
-                       class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
+                  list="hotelList"
+                  placeholder="Buscar hotel (nombre, etc.)…"
+                  class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
                 <button id="clearHotel"
-                        class="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
+                  class="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
                   Limpiar
                 </button>
               </div>
@@ -41,7 +60,7 @@
             </div>
           </div>
 
-          <!-- Fila 2: selección de proveedores (hasta 10) -->
+          {{-- Fila 2: selección de proveedores (hasta 10) --}}
           <div class="flex flex-col md:flex-row items-start md:items-center gap-3">
             <div class="flex flex-col gap-1 w-full md:w-auto">
               <div class="flex items-center gap-2">
@@ -49,17 +68,17 @@
                   Proveedores (máx. 10)
                 </label>
                 <input id="provMulti"
-                       list="provList"
-                       placeholder="Ej: itravex, hotelbeds..."
-                       class="flex-1 min-w-[260px] rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                  list="provList"
+                  placeholder="Ej: itravex, hotelbeds..."
+                  class="flex-1 min-w-[260px] rounded-md border border-slate-300 px-3 py-2 text-sm" />
                 <button id="clearProv"
-                        class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
+                  class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
                   Limpiar
                 </button>
               </div>
               <div id="provSelected"
-                   class="text-xs text-slate-600">
-                <!-- Aquí mostraremos los seleccionados -->
+                class="text-xs text-slate-600">
+                {{-- Aquí mostraremos los seleccionados --}}
               </div>
             </div>
 
@@ -70,40 +89,94 @@
             </div>
           </div>
 
+          {{-- Fila 3: subir Excel con GIATA + campo de filtro GIATA --}}
+          <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mt-1">
+            {{-- Form solo para subir el XLSX con GIATA --}}
+            <form method="POST"
+              action="{{ route('giata.codes.uploadGiata') }}"
+              enctype="multipart/form-data"
+              class="flex flex-col gap-2 md:flex-row md:items-end">
+              @csrf
+              <div class="flex flex-col gap-1 w-full md:w-[320px]">
+                <label class="text-sm text-slate-600">
+                  Cargar GIATA desde Excel (.xlsx)
+                </label>
+                <input type="file" name="giata_file"
+                  class="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs shadow-sm
+                         focus:border-blue-500 focus:ring-blue-500">
+                <small class="text-[11px] text-slate-500">
+                  Excel con una sola columna <strong>GIATA</strong>
+                  (cabecera en fila 1, códigos desde la fila 2).
+                </small>
+              </div>
+
+              <button type="submit"
+                class="inline-flex items-center rounded-md px-3 py-2 text-xs font-medium text-white shadow-sm mt-2 md:mt-0"
+                style="background:#004665; border:1px solid #00354b;"
+                onmouseover="this.style.background='#00354b'"
+                onmouseout="this.style.background='#004665'">
+                Cargar lista GIATA
+              </button>
+            </form>
+
+            {{-- Campo de filtro GIATA donde se volcarán los códigos del Excel --}}
+            <div class="flex flex-col gap-1 w-full md:w-[340px]">
+              <div class="flex items-center justify-between gap-2">
+                <label class="text-sm text-slate-600">
+                  Filtro de GIATA (lista de IDs)
+                </label>
+                <button id="clearGiata"
+                  type="button"
+                  class="rounded-md border border-slate-300 px-2 py-1 text-[11px] hover:bg-slate-50">
+                  Limpiar GIATA
+                </button>
+              </div>
+              <textarea id="giataFilter"
+                rows="3"
+                placeholder="Ej: 123456, 789012, 345678..."
+                class="w-full rounded-md border border-slate-300 px-3 py-2 text-[11px] shadow-sm
+                       focus:border-blue-500 focus:ring-blue-500">@if(!empty($giataIdsString)){{ $giataIdsString }}@endif</textarea>
+              <small class="text-[11px] text-slate-500">
+                Aquí se rellenan los códigos desde el Excel. También puedes pegarlos/editar a mano
+                (separados por espacios, comas, punto y coma o saltos de línea).
+              </small>
+            </div>
+          </div>
+
           <datalist id="provList"></datalist>
           <datalist id="hotelList"></datalist>
-        </div>
 
-        <div class="mt-4 overflow-auto">
-          <table class="min-w-full text-sm border-separate border-spacing-0" id="codesTable">
-            <thead>
-              <tr class="bg-slate-50">
-                <th class="sticky left-0 z-10 bg-slate-50 text-left p-3 border-b">Hotel (GIATA)</th>
-                <th id="providersLoading" class="p-3 border-b text-left text-slate-400">
-                  Cargando proveedores…
-                </th>
-              </tr>
-            </thead>
-            <tbody id="rowsBody">
-              <tr>
-                <td class="p-4 text-slate-500" colspan="99">Cargando…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          <div class="mt-4 overflow-auto">
+            <table class="min-w-full text-sm border-separate border-spacing-0" id="codesTable">
+              <thead>
+                <tr class="bg-slate-50">
+                  <th class="sticky left-0 z-10 bg-slate-50 text-left p-3 border-b">Hotel (GIATA)</th>
+                  <th id="providersLoading" class="p-3 border-b text-left text-slate-400">
+                    Cargando proveedores…
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="rowsBody">
+                <tr>
+                  <td class="p-4 text-slate-500" colspan="99">Cargando…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <div class="mt-4 flex items-center justify-between text-sm">
-          <div id="metaText" class="text-slate-600">—</div>
+          <div class="mt-4 flex items-center justify-between text-sm">
+            <div id="metaText" class="text-slate-600">—</div>
 
-          <div class="flex gap-2">
-            <!-- Botón de exportación -->
-            <button id="btnExport"
-                    class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
-              Exportar Excel
-            </button>
+            <div class="flex gap-2">
+              {{-- Botón de exportación --}}
+              <button id="btnExport"
+                class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
+                Exportar Excel
+              </button>
 
-            <button id="prevBtn" class="px-3 py-1 border rounded disabled:opacity-50">Anterior</button>
-            <button id="nextBtn" class="px-3 py-1 border rounded disabled:opacity-50">Siguiente</button>
+              <button id="prevBtn" class="px-3 py-1 border rounded disabled:opacity-50">Anterior</button>
+              <button id="nextBtn" class="px-3 py-1 border rounded disabled:opacity-50">Siguiente</button>
+            </div>
           </div>
         </div>
       </div>
@@ -111,35 +184,38 @@
   </div>
 
   <script>
-    (function () {
-      const qs  = (s, el = document) => el.querySelector(s);
+    (function() {
+      const qs = (s, el = document) => el.querySelector(s);
       const qsa = (s, el = document) => Array.from(el.querySelectorAll(s));
 
-      const apiUrl        = "{{ url('/giata/codes') }}";           // JSON GIATA
-      const hotelsApiUrl  = "{{ url('/giata/hotels-suggest') }}";  // JSON hoteles (tabla hotels)
+      const apiUrl = "{{ url('/giata/codes') }}"; // JSON GIATA
+      const hotelsApiUrl = "{{ url('/giata/hotels-suggest') }}"; // JSON hoteles (tabla hotels)
 
-      const perSel    = qs('#perPage');
-      const rowsEl    = qs('#rowsBody');
-      const metaEl    = qs('#metaText');
-      const prevBtn   = qs('#prevBtn');
-      const nextBtn   = qs('#nextBtn');
+      const perSel = qs('#perPage');
+      const rowsEl = qs('#rowsBody');
+      const metaEl = qs('#metaText');
+      const prevBtn = qs('#prevBtn');
+      const nextBtn = qs('#nextBtn');
       const btnExport = qs('#btnExport');
 
-      const provMulti    = qs('#provMulti');
-      const clearProv    = qs('#clearProv');
-      const provList     = qs('#provList');
+      const provMulti = qs('#provMulti');
+      const clearProv = qs('#clearProv');
+      const provList = qs('#provList');
       const provSelected = qs('#provSelected');
 
-      const hotelSearch  = qs('#hotelSearch');
-      const clearHotel   = qs('#clearHotel');
-      const hotelList    = qs('#hotelList');
+      const hotelSearch = qs('#hotelSearch');
+      const clearHotel = qs('#clearHotel');
+      const hotelList = qs('#hotelList');
+
+      const giataFilter = qs('#giataFilter');
+      const clearGiata = qs('#clearGiata');
 
       let allProviders = []; // lista completa (cache)
-      let providers    = []; // columnas activas (filtradas)
-      let page         = 1;
+      let providers = []; // columnas activas (filtradas)
+      let page = 1;
 
       // cache de filas de la página actual
-      let lastRows     = [];
+      let lastRows = [];
 
       // lista real de provider_code seleccionados (estado)
       let selectedCodes = [];
@@ -306,7 +382,7 @@
           if (!prov) continue;
 
           const code = prov.provider_code || '';
-          const lc   = code.toLowerCase();
+          const lc = code.toLowerCase();
           const already = selectedCodes.some(c => c.toLowerCase() === lc);
           if (!already && selectedCodes.length < 10) {
             selectedCodes.push(code);
@@ -367,11 +443,31 @@
         const term = (hotelSearch.value || '').trim();
         if (term) params.set('q', term);
 
+        // Pasar lista de GIATA (si hay en el textarea) como giata_ids[]
+        if (giataFilter) {
+          const giataRaw = (giataFilter.value || '').trim();
+          if (giataRaw) {
+            giataRaw
+              .split(/[\s,;]+/)
+              .map(v => v.trim())
+              .filter(Boolean)
+              .forEach(id => params.append('giata_ids[]', id));
+          }
+        }
+        // Pasar lista de proveedores seleccionados (provider_code) como providers[]
+        if (selectedCodes.length) {
+          selectedCodes.forEach(code => {
+            params.append('providers[]', code);
+          });
+        }
+
         params.set('per_page', perSel.value);
         params.set('page', page);
 
-        const res  = await fetch(`${apiUrl}?${params.toString()}`, {
-          headers: { 'Accept': 'application/json' }
+        const res = await fetch(`${apiUrl}?${params.toString()}`, {
+          headers: {
+            'Accept': 'application/json'
+          }
         });
         const json = await res.json();
 
@@ -435,13 +531,15 @@
         const csv = allRows
           .map(cols =>
             cols
-              .map(v => `"${String(v).replace(/"/g, '""')}"`)
-              .join(';')
+            .map(v => `"${String(v).replace(/"/g, '""')}"`)
+            .join(';')
           )
           .join('\r\n');
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url  = URL.createObjectURL(blob);
+        const blob = new Blob([csv], {
+          type: 'text/csv;charset=utf-8;'
+        });
+        const url = URL.createObjectURL(blob);
 
         const a = document.createElement('a');
         a.href = url;
@@ -470,9 +568,13 @@
         hotelAbortController = new AbortController();
 
         try {
-          const params = new URLSearchParams({ q: term });
+          const params = new URLSearchParams({
+            q: term
+          });
           const res = await fetch(`${hotelsApiUrl}?${params.toString()}`, {
-            headers: { 'Accept': 'application/json' },
+            headers: {
+              'Accept': 'application/json'
+            },
             signal: hotelAbortController.signal,
           });
           if (!res.ok) return;
@@ -568,6 +670,15 @@
         renderSelectedCodes();
         onCompareChange();
       });
+
+      // Limpiar filtro GIATA
+      if (clearGiata && giataFilter) {
+        clearGiata.addEventListener('click', () => {
+          giataFilter.value = '';
+          page = 1;
+          fetchPage();
+        });
+      }
 
       // Exportar
       btnExport.addEventListener('click', exportCurrentTableToCsv);

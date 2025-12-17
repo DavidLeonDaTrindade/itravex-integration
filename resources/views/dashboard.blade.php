@@ -64,14 +64,14 @@
 
             {{-- GIATA – Propiedades CSV --}}
             <a href="{{ route('giata.properties.raw.index') }}"
-               class="group rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition">
+              class="group rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300 hover:shadow-sm transition">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-md"
                   style="background:#00466510; border:1px solid #00466525;">
                   <svg xmlns="http://www.w3.org/2000/svg"
-                       class="h-5 w-5" fill="none" stroke="currentColor" style="color:#004665">
+                    class="h-5 w-5" fill="none" stroke="currentColor" style="color:#004665">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"
-                      d="M4 5h16v4H4zM4 11h10v4H4zM4 17h7v2H4z"/>
+                      d="M4 5h16v4H4zM4 11h10v4H4zM4 17h7v2H4z" />
                   </svg>
                 </span>
                 <div class="flex-1">
@@ -122,14 +122,14 @@
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 ring-1 ring-amber-100">
                   <svg class="h-5 w-5 text-amber-600" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M5 13l4 4L19 7"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M5 13l4 4L19 7" />
                   </svg>
                 </span>
                 <div class="flex-1">
                   <div class="flex items-center justify-between">
                     <h2 class="text-sm font-medium text-slate-900">Estado de peticiones (Locata)</h2>
                     <svg class="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z"/>
+                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z" />
                     </svg>
                   </div>
                   <p class="mt-1 text-xs text-slate-600">Revisa el estado y trazas de reservas en curso.</p>
@@ -139,19 +139,19 @@
 
             {{-- Proveedores --}}
             <a href="{{ route('giata.providers.index') }}"
-               class="group rounded-lg border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition">
+              class="group rounded-lg border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-md"
-                      style="background:#00466510; border:1px solid #00466525;">
+                  style="background:#00466510; border:1px solid #00466525;">
                   <svg class="h-5 w-5" fill="none" stroke="currentColor" style="color:#004665">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 7h18M3 12h18M3 17h18M7 7v10"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 7h18M3 12h18M3 17h18M7 7v10" />
                   </svg>
                 </span>
                 <div class="flex-1">
                   <div class="flex items-center justify-between">
                     <h2 class="text-sm font-medium text-slate-900">GIATA – Proveedores</h2>
                     <svg class="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z"/>
+                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z" />
                     </svg>
                   </div>
                   <p class="mt-1 text-xs text-slate-600">Busca proveedores de GIATA por nombre y tipo (GDS / TTOO).</p>
@@ -161,19 +161,19 @@
 
             {{-- Logs --}}
             <a href="{{ route('logs.itravex') }}"
-               class="group rounded-lg border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition">
+              class="group rounded-lg border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 ring-1 ring-slate-200">
                   <svg class="h-5 w-5 text-slate-700" fill="none" stroke="currentColor">
                     <path stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
-                      d="M4 6h16M4 10h16M4 14h10m-6 4h6"/>
+                      d="M4 6h16M4 10h16M4 14h10m-6 4h6" />
                   </svg>
                 </span>
                 <div class="flex-1">
                   <div class="flex items-center justify-between">
                     <h2 class="text-sm font-medium text-slate-900">Ver logs de Itravex</h2>
                     <svg class="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z"/>
+                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z" />
                     </svg>
                   </div>
                   <p class="mt-1 text-xs text-slate-600">Depura llamadas, tiempos, respuestas y errores.</p>
@@ -183,27 +183,26 @@
 
             {{-- GIATA Códigos por hotel --}}
             <a href="{{ route('giata.codes.browser') }}"
-               class="group rounded-lg border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition">
+              class="group rounded-lg border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-md"
-                      style="background:#FDB31B15; border:1px solid #FDB31B33;">
+                  style="background:#FDB31B15; border:1px solid #FDB31B33;">
                   <svg class="h-5 w-5" fill="none" stroke="currentColor" style="color:#FDB31B">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"
-                      d="M3 5h18M3 10h18M3 15h18M3 20h18"/>
+                      d="M3 5h18M3 10h18M3 15h18M3 20h18" />
                   </svg>
                 </span>
                 <div class="flex-1">
                   <div class="flex items-center justify-between">
                     <h2 class="text-sm font-medium text-slate-900">GIATA – Códigos por hotel</h2>
                     <svg class="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z"/>
+                      <path fill-rule="evenodd" d="M7.293 14.707l4-4-4-4 1.414-1.414 4 4-4 4z" />
                     </svg>
                   </div>
                   <p class="mt-1 text-xs text-slate-600">Mapa de códigos por proveedor para cada hotel GIATA.</p>
                 </div>
               </div>
             </a>
-
           </div>
 
           {{-- Footer --}}
