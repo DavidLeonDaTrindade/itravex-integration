@@ -444,16 +444,19 @@
         if (term) params.set('q', term);
 
         // Pasar lista de GIATA (si hay en el textarea) como giata_ids[]
+        // Solo tokens numéricos => así si el usuario pone "123456, CODIGO"
+        // se usa 123456 y se ignora "CODIGO".
         if (giataFilter) {
           const giataRaw = (giataFilter.value || '').trim();
           if (giataRaw) {
             giataRaw
-              .split(/[\s,;]+/)
+              .split(/[\s,;]+/) // separa por espacios, comas, punto y coma
               .map(v => v.trim())
-              .filter(Boolean)
+              .filter(v => v !== '' && /^\d+$/.test(v)) // solo números enteros
               .forEach(id => params.append('giata_ids[]', id));
           }
         }
+
         // Pasar lista de proveedores seleccionados (provider_code) como providers[]
         if (selectedCodes.length) {
           selectedCodes.forEach(code => {
@@ -585,7 +588,7 @@
           data.forEach(h => {
             const opt = document.createElement('option');
             opt.value = h.name || '';
-            opt.label = `${h.name || ''} (codser: ${h.codser || ''})`;
+            opt.label = `${h.name || ''} (GIATA: ${h.giata_id ?? '—'})`;
             hotelList.appendChild(opt);
           });
         } catch (e) {

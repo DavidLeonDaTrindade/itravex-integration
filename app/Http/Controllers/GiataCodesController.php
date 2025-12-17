@@ -111,20 +111,35 @@ class GiataCodesController extends Controller
     }
 
     public function hotelSuggest(Request $request)
-    {
-        $term = trim((string)$request->query('q', ''));
+{
+    $term = trim((string)$request->query('q', ''));
 
-        if (strlen($term) < 2) {
-            return response()->json([]); // para evitar cargas innecesarias
-        }
-
-        $rows = \DB::table('hotels')
-            ->select('codser', 'name')
-            ->where('name', 'like', "%{$term}%")
-            ->orderBy('name')
-            ->limit(25)
-            ->get();
-
-        return response()->json($rows);
+    if (strlen($term) < 2) {
+        return response()->json([]);
     }
+
+    // 1) Buscar hoteles locales
+    $rows = \DB::table('hotels')
+        ->select('name', 'codser')
+        ->where('name', 'like', "%{$term}%")
+        ->orderBy('name')
+        ->limit(25)
+        ->get();
+
+    // 2) Agregar GIATA a cada hotel usando giata_properties
+    $mapped = $rows->map(function ($h) {
+        $giata = \DB::table('giata_properties')
+            ->where('name', $h->name)       // EXACT MATCH (puede mejorarse si quieres)
+            ->value('giata_id');
+
+        return [
+            'name'     => $h->name,
+            'codser'   => $h->codser,
+            'giata_id' => $giata ?? null,   // Si no lo encuentra, null
+        ];
+    });
+
+    return response()->json($mapped);
+}
+
 }
