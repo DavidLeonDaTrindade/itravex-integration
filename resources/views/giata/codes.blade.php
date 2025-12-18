@@ -1,4 +1,51 @@
 {{-- resources/views/giata/codes.blade.php --}}
+<style>
+  .per-page-select {
+    padding-right: 2.2rem !important;
+    /* mueve SOLO la flecha hacia la derecha */
+  }
+</style>
+<style>
+  .per-page-select {
+    padding-right: 2.2rem !important;
+  }
+
+  /* Barra de progreso + porcentaje */
+  .progress-wrapper {
+    max-width: 420px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    /* slate-300 */
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: #004665;
+    /* color corporativo */
+    border-radius: 9999px;
+    transition: width 0.15s linear;
+  }
+
+  .progress-percent {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: #64748b;
+    /* slate-500 */
+  }
+</style>
+
+
+
+
 <x-app-layout>
   <div class="min-h-screen bg-slate-50 px-4 py-8">
     <div class="mx-auto max-w-7xl">
@@ -29,11 +76,10 @@
         </div>
         @endif
 
-        <div class="flex flex-col gap-3">
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-4">
           {{-- Fila 1: búsqueda por hotel + por página --}}
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div class="flex flex-col md:flex-row md:items-center gap-3">
             <div class="flex flex-col gap-2 w-full md:w-[420px]">
-              {{-- Autocompletado de hoteles (tabla hotels) --}}
               <div class="flex items-center gap-2">
                 <input id="hotelSearch"
                   list="hotelList"
@@ -50,137 +96,146 @@
               </small>
             </div>
 
-            <div class="flex items-center gap-2">
-              <label class="text-sm text-slate-600">Por página</label>
-              <select id="perPage" class="rounded-md border border-slate-300 px-2 py-2 text-sm">
+            <div class="flex items-center">
+              <label class="text-sm text-slate-600 whitespace-nowrap">
+                Por página
+              </label>
+
+              <select id="perPage"
+                class="rounded-md border border-slate-300 px-3 py-2 text-sm per-page-select">
                 <option>25</option>
                 <option>50</option>
                 <option>100</option>
               </select>
             </div>
+
+
           </div>
+        </div>
 
-          {{-- Fila 2: selección de proveedores (hasta 10) --}}
-          <div class="flex flex-col md:flex-row items-start md:items-center gap-3">
-            <div class="flex flex-col gap-1 w-full md:w-auto">
-              <div class="flex items-center gap-2">
-                <label class="text-sm text-slate-600 whitespace-nowrap">
-                  Proveedores (máx. 10)
-                </label>
-                <input id="provMulti"
-                  list="provList"
-                  placeholder="Ej: itravex, hotelbeds..."
-                  class="flex-1 min-w-[260px] rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                <button id="clearProv"
-                  class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
-                  Limpiar
-                </button>
-              </div>
-              <div id="provSelected"
-                class="text-xs text-slate-600">
-                {{-- Aquí mostraremos los seleccionados --}}
-              </div>
-            </div>
 
-            <div class="text-xs text-slate-500">
-              Selecciona hasta 10 <code>provider_code</code>.<br>
-              Si lo dejas vacío, se mostrarán solo proveedores con datos en la página
-              (itravex primero si aplica).
-            </div>
-          </div>
 
-          {{-- Fila 3: subir Excel con GIATA + campo de filtro GIATA --}}
-          <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mt-1">
-            {{-- Form solo para subir el XLSX con GIATA --}}
-            <form method="POST"
-              action="{{ route('giata.codes.uploadGiata') }}"
-              enctype="multipart/form-data"
-              class="flex flex-col gap-2 md:flex-row md:items-end">
-              @csrf
-              <div class="flex flex-col gap-1 w-full md:w-[320px]">
-                <label class="text-sm text-slate-600">
-                  Cargar GIATA desde Excel (.xlsx)
-                </label>
-                <input type="file" name="giata_file"
-                  class="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs shadow-sm
-                         focus:border-blue-500 focus:ring-blue-500">
-                <small class="text-[11px] text-slate-500">
-                  Excel con una sola columna <strong>GIATA</strong>
-                  (cabecera en fila 1, códigos desde la fila 2).
-                </small>
-              </div>
-
-              <button type="submit"
-                class="inline-flex items-center rounded-md px-3 py-2 text-xs font-medium text-white shadow-sm mt-2 md:mt-0"
-                style="background:#004665; border:1px solid #00354b;"
-                onmouseover="this.style.background='#00354b'"
-                onmouseout="this.style.background='#004665'">
-                Cargar lista GIATA
+        {{-- Fila 2: selección de proveedores (hasta 10) --}}
+        <div class="flex flex-col md:flex-row items-start md:items-center gap-10">
+          <div class="flex flex-col gap-1 w-full md:w-auto">
+            <div class="flex items-center gap-2">
+              <label class="text-sm text-slate-600 whitespace-nowrap">
+                Proveedores (máx. 10)
+              </label>
+              <input id="provMulti"
+                list="provList"
+                placeholder="Ej: itravex, hotelbeds..."
+                class="flex-1 min-w-[260px] rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              <button id="clearProv"
+                class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
+                Limpiar
               </button>
-            </form>
+            </div>
+            <div id="provSelected"
+              class="text-xs text-slate-600">
+              {{-- Aquí mostraremos los seleccionados --}}
+            </div>
+          </div>
 
-            {{-- Campo de filtro GIATA donde se volcarán los códigos del Excel --}}
-            <div class="flex flex-col gap-1 w-full md:w-[340px]">
-              <div class="flex items-center justify-between gap-2">
-                <label class="text-sm text-slate-600">
-                  Filtro de GIATA (lista de IDs)
-                </label>
-                <button id="clearGiata"
-                  type="button"
-                  class="rounded-md border border-slate-300 px-2 py-1 text-[11px] hover:bg-slate-50">
-                  Limpiar GIATA
-                </button>
-              </div>
-              <textarea id="giataFilter"
-                rows="3"
-                placeholder="Ej: 123456, 789012, 345678..."
-                class="w-full rounded-md border border-slate-300 px-3 py-2 text-[11px] shadow-sm
-                       focus:border-blue-500 focus:ring-blue-500">@if(!empty($giataIdsString)){{ $giataIdsString }}@endif</textarea>
+          <div class="text-xs text-slate-500">
+            Selecciona hasta 10 <code>provider_code</code>.<br>
+            Si lo dejas vacío, se mostrarán solo proveedores con datos en la página
+            (itravex primero si aplica).
+          </div>
+        </div>
+
+        {{-- Fila 3: subir Excel con GIATA + campo de filtro GIATA --}}
+        <div class="flex flex-col md:flex-row md:items-center gap-3">
+          {{-- Form solo para subir el XLSX con GIATA --}}
+          <form method="POST"
+            action="{{ route('giata.codes.uploadGiata') }}"
+            enctype="multipart/form-data"
+            class="flex flex-col gap-2 md:flex-row md:items-end">
+            @csrf
+            <div class="flex flex-col gap-1 w-full md:w-[320px]">
+              <label class="text-sm text-slate-600">
+                Cargar GIATA desde Excel (.xlsx)
+              </label>
+              <input type="file" name="giata_file"
+                class="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs shadow-sm
+                         focus:border-blue-500 focus:ring-blue-500">
               <small class="text-[11px] text-slate-500">
-                Aquí se rellenan los códigos desde el Excel. También puedes pegarlos/editar a mano
-                (separados por espacios, comas, punto y coma o saltos de línea).
+                Excel con una sola columna <strong>GIATA</strong>
+                (cabecera en fila 1, códigos desde la fila 2).
               </small>
             </div>
-          </div>
 
-          <datalist id="provList"></datalist>
-          <datalist id="hotelList"></datalist>
+            <button type="submit"
+              class="inline-flex items-center rounded-md px-3 py-2 text-xs font-medium text-white shadow-sm mt-2 md:mt-0"
+              style="background:#004665; border:1px solid #00354b;"
+              onmouseover="this.style.background='#00354b'"
+              onmouseout="this.style.background='#004665'">
+              Cargar lista GIATA
+            </button>
+          </form>
 
-          <div class="mt-4 overflow-auto">
-            <table class="min-w-full text-sm border-separate border-spacing-0" id="codesTable">
-              <thead>
-                <tr class="bg-slate-50">
-                  <th class="sticky left-0 z-10 bg-slate-50 text-left p-3 border-b">Hotel (GIATA)</th>
-                  <th id="providersLoading" class="p-3 border-b text-left text-slate-400">
-                    Cargando proveedores…
-                  </th>
-                </tr>
-              </thead>
-              <tbody id="rowsBody">
-                <tr>
-                  <td class="p-4 text-slate-500" colspan="99">Cargando…</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="mt-4 flex items-center justify-between text-sm">
-            <div id="metaText" class="text-slate-600">—</div>
-
-            <div class="flex gap-2">
-              {{-- Botón de exportación --}}
-              <button id="btnExport"
-                class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
-                Exportar Excel
+          {{-- Campo de filtro GIATA donde se volcarán los códigos del Excel --}}
+          <div class="flex flex-col gap-1 w-full md:w-[340px]">
+            <div class="flex items-center justify-between gap-2">
+              <label class="text-sm text-slate-600">
+                Filtro de GIATA (lista de IDs)
+              </label>
+              <button id="clearGiata"
+                type="button"
+                class="rounded-md border border-slate-300 px-2 py-1 text-[11px] hover:bg-slate-50">
+                Limpiar GIATA
               </button>
-
-              <button id="prevBtn" class="px-3 py-1 border rounded disabled:opacity-50">Anterior</button>
-              <button id="nextBtn" class="px-3 py-1 border rounded disabled:opacity-50">Siguiente</button>
             </div>
+            <textarea id="giataFilter"
+              rows="3"
+              placeholder="Ej: 123456, 789012, 345678..."
+              class="w-full rounded-md border border-slate-300 px-3 py-2 text-[11px] shadow-sm
+                       focus:border-blue-500 focus:ring-blue-500">@if(!empty($giataIdsString)){{ $giataIdsString }}@endif</textarea>
+            <small class="text-[11px] text-slate-500">
+              Aquí se rellenan los códigos desde el Excel. También puedes pegarlos/editar a mano
+              (separados por espacios, comas, punto y coma o saltos de línea).
+            </small>
+          </div>
+        </div>
+
+        <datalist id="provList"></datalist>
+        <datalist id="hotelList"></datalist>
+
+        <div class="mt-4 overflow-auto">
+          <table class="min-w-full text-sm border-separate border-spacing-0" id="codesTable">
+            <thead>
+              <tr class="bg-slate-50">
+                <th class="sticky left-0 z-10 bg-slate-50 text-left p-3 border-b">Hotel (GIATA)</th>
+                <th id="providersLoading" class="p-3 border-b text-left text-slate-400">
+                  Cargando proveedores…
+                </th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody">
+              <tr>
+                <td class="p-4 text-slate-500" colspan="99">Cargando…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-4 flex items-center justify-between text-sm">
+          <div id="metaText" class="text-slate-600">—</div>
+
+          <div class="flex gap-2">
+            {{-- Botón de exportación --}}
+            <button id="btnExport"
+              class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
+              Exportar Excel
+            </button>
+
+            <button id="prevBtn" class="px-3 py-1 border rounded disabled:opacity-50">Anterior</button>
+            <button id="nextBtn" class="px-3 py-1 border rounded disabled:opacity-50">Siguiente</button>
           </div>
         </div>
       </div>
     </div>
+  </div>
   </div>
 
   <script>
@@ -213,6 +268,8 @@
       let allProviders = []; // lista completa (cache)
       let providers = []; // columnas activas (filtradas)
       let page = 1;
+      let loadingInterval = null;
+      let loadingPercent = 0;
 
       // cache de filas de la página actual
       let lastRows = [];
@@ -339,10 +396,60 @@
         });
       };
 
-      const setLoading = () => {
-        rowsEl.innerHTML =
-          '<tr><td class="p-4 text-slate-500" colspan="99">Cargando…</td></tr>';
+            const setLoading = () => {
+        // Pintamos la fila con la barra y el porcentaje
+        rowsEl.innerHTML = `
+          <tr>
+            <td colspan="99" class="p-6">
+              <div class="progress-wrapper">
+                <div class="progress-bar">
+                  <div id="progressBarFill" class="progress-bar-fill"></div>
+                </div>
+                <div id="progressPercent" class="progress-percent">Cargando 0%</div>
+              </div>
+            </td>
+          </tr>
+        `;
+
+        // Reseteamos estado
+        loadingPercent = 0;
+        const fillEl = document.getElementById('progressBarFill');
+        const textEl = document.getElementById('progressPercent');
+
+        if (loadingInterval) {
+          clearInterval(loadingInterval);
+          loadingInterval = null;
+        }
+
+        // Animación "falsa" hasta ~90% mientras esperamos el fetch real
+        loadingInterval = setInterval(() => {
+          if (loadingPercent < 90) {
+            loadingPercent += 5;
+            if (fillEl) fillEl.style.width = `${loadingPercent}%`;
+            if (textEl) textEl.textContent = `Cargando ${loadingPercent}%`;
+          }
+        }, 120);
       };
+
+      const finishLoading = async () => {
+        const fillEl = document.getElementById('progressBarFill');
+        const textEl = document.getElementById('progressPercent');
+
+        if (loadingInterval) {
+          clearInterval(loadingInterval);
+          loadingInterval = null;
+        }
+
+        loadingPercent = 100;
+        if (fillEl) fillEl.style.width = '100%';
+        if (textEl) textEl.textContent = 'Cargando 100%';
+
+        // Pequeña pausa para que el usuario vea el 100%
+        await new Promise(res => setTimeout(res, 150));
+      };
+
+
+
 
       // Helpers selección proveedores
       const codeEq = (a, b) =>
