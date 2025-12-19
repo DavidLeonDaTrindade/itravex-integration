@@ -40,7 +40,9 @@
 
 
         <header class="mb-8">
-          <h1 class="text-3xl font-semibold text-slate-900 tracking-tight">Bienvenido</h1>
+          <h1 class="text-3xl font-semibold tracking-tight text-[#004665]">
+            Bienvenido
+          </h1>
           <p class="mt-2 text-slate-600">Consulta disponibilidad de hoteles y realiza tu reserva fácilmente.</p>
         </header>
 
