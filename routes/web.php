@@ -133,8 +133,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/giata/providers/search', [GiataProviderController::class, 'search'])
         ->name('giata.providers.search'); // ← nueva ruta JSON
 
-    Route::get('/giata/codes', [GiataCodesController::class, 'index'])
-        ->name('giata.codes.index');
+    Route::match(['GET','POST'], '/giata/codes', [GiataCodesController::class, 'index'])
+    ->name('giata.codes.index');
 
 
     Route::get('/giata/codes/browser', [GiataCodesController::class, 'browser'])
