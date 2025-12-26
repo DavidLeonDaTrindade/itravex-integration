@@ -32,12 +32,14 @@ if (!isset($slot)) {
     @endisset
 
     {{-- CLAVE: main debe ser flex y ocupar el alto restante --}}
-    <main class="flex-1 flex">
-      {{-- wrapper para que el slot pueda usar h-full/min-h-full --}}
-      <div class="flex-1 flex">
+    <main class="flex-1 ">
+    
         {{ $slot }}
-      </div>
+      
     </main>
   </div>
 </body>
 </html>
+
+
+

@@ -1,293 +1,501 @@
 {{-- resources/views/availability/form.blade.php --}}
+<style>
+  /* ====== Tokens suaves tipo dashboard ====== */
+  :root {
+    --pb-primary: #004665;
+    --pb-accent: #FDB31B;
+  }
+
+  /* Card wrapper */
+  .pb-card {
+    border-radius: 1rem;
+    /* rounded-2xl */
+    border: 1px solid rgb(226 232 240);
+    /* slate-200 */
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(2, 6, 23, .06);
+  }
+
+  .pb-card-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgb(241 245 249);
+    /* slate-100 */
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .pb-card-body {
+    padding: 1.5rem;
+  }
+
+  /* Inputs uniformes */
+  .pb-input,
+  .pb-select,
+  .pb-textarea {
+    width: 100%;
+    border-radius: .75rem;
+    /* rounded-xl */
+    border: 1px solid rgb(203 213 225);
+    /* slate-300 */
+    background: #fff;
+    padding: .625rem .875rem;
+    /* h cómoda */
+    box-shadow: 0 1px 1px rgba(2, 6, 23, .04);
+    transition: box-shadow .15s ease, border-color .15s ease;
+    outline: none;
+  }
+
+  .pb-input:focus,
+  .pb-select:focus,
+  .pb-textarea:focus {
+    border-color: rgba(0, 70, 101, .55);
+    box-shadow: 0 0 0 4px rgba(0, 70, 101, .14);
+  }
+
+  .pb-input::placeholder,
+  .pb-textarea::placeholder {
+    color: rgb(148 163 184);
+    /* slate-400 */
+  }
+
+  /* Labels */
+  .pb-label {
+    font-size: .875rem;
+    font-weight: 600;
+    color: rgb(51 65 85);
+    /* slate-700 */
+  }
+
+  /* Helper text */
+  .pb-help {
+    margin-top: .375rem;
+    font-size: .75rem;
+    color: rgb(100 116 139);
+    /* slate-500 */
+    line-height: 1.35;
+  }
+
+  /* Botones */
+  .pb-btn {
+    border-radius: .75rem;
+    padding: .625rem 1rem;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(2, 6, 23, .08);
+    transition: transform .05s ease, box-shadow .15s ease, background .15s ease;
+  }
+
+  .pb-btn:active {
+    transform: translateY(1px);
+  }
+
+  .pb-btn-primary {
+    background: var(--pb-primary);
+    color: #fff;
+  }
+
+  .pb-btn-primary:hover {
+    background: #003a54;
+  }
+
+  .pb-btn-primary:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0, 70, 101, .18);
+  }
+
+  .pb-btn-ghost {
+    color: var(--pb-primary);
+    background: rgba(0, 70, 101, .06);
+  }
+
+  .pb-btn-ghost:hover {
+    background: rgba(0, 70, 101, .10);
+  }
+
+  /* Sugerencias (dropdown) */
+  .pb-suggest {
+    border-radius: .875rem;
+    border: 1px solid rgb(226 232 240);
+    box-shadow: 0 12px 30px rgba(2, 6, 23, .12);
+    overflow: hidden;
+  }
+
+  .pb-suggest button {
+    padding: .75rem .875rem;
+  }
+
+  .pb-suggest button+button {
+    border-top: 1px solid rgb(241 245 249);
+  }
+
+  /* Secciones internas (habitaciones / credenciales) */
+  .pb-section {
+    border-radius: 1rem;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    /* slate-50 */
+  }
+
+  .pb-section-title {
+    font-size: .875rem;
+    font-weight: 700;
+    color: rgb(51 65 85);
+  }
+
+  /* Room row */
+  .pb-room {
+    border-radius: 1rem;
+    border: 1px solid rgb(226 232 240);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(2, 6, 23, .05);
+  }
+
+  /* Autofill sin “naranja” */
+  input:-webkit-autofill {
+    -webkit-text-fill-color: #0f172a !important;
+    transition: background-color 9999s ease-in-out 0s;
+    box-shadow: 0 0 0px 1000px #fff inset !important;
+  }
+</style>
+<style>
+  html {
+    scrollbar-gutter: stable;
+  }
+</style>
+<style>
+  /* En pantallas grandes, fuerza el mismo padding a izquierda y derecha */
+  @media (min-width: 1024px) {
+    .pb-force-symmetric {
+      padding-left: 2rem !important;
+      padding-right: 2rem !important;
+    }
+  }
+</style>
+
+
 <x-app-layout>
   <div class="min-h-screen bg-slate-50 py-10">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <header class="mb-6">
-        <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Buscar Disponibilidad</h1>
-        <p class="mt-1 text-sm text-slate-600">Consulta por zona o por códigos de hotel y filtra por fechas.</p>
-      </header>
+    <div class="mx-auto max-w-7xl pb-force-symmetric px-4 sm:px-6 lg:px-8">
 
-      <div class="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div class="p-6 md:p-8">
 
-          <form
-            method="POST"
-            action="{{ route('availability.search') }}"
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            class="grid grid-cols-1 gap-6 md:grid-cols-2"
-            id="availability-form">
-            @csrf
+      <div class="mx-auto rounded-2xl p-8 lg:p-8"
+        style="background:#e2e8f0; border:1px solid #cbd5e1;">
 
-            {{-- ======================== BÚSQUEDA POR ZONA ======================== --}}
-            <div class="md:col-span-1 relative">
-              <label for="area_name" class="block text-sm font-medium text-slate-700">
-                Área (buscar por nombre)
-              </label>
 
-              <input id="area_name" type="text"
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Escribe el nombre del área (p. ej., Tenerife)"
-                autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <header class="mb-6">
+          <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Buscar Disponibilidad</h1>
+          <p class="mt-1 text-sm text-slate-600">Consulta por zona o por códigos de hotel y filtra por fechas.</p>
+        </header>
 
-              {{-- Contenedor de sugerencias --}}
-              <div id="area_suggestions"
-                class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-72 overflow-auto">
-                {{-- se pintan aquí las opciones --}}
-              </div>
+        <div class="mb-8 pb-card" style="background:#cbd5e1;">
 
-              <p class="mt-1 text-xs text-slate-500">
-                Escribe el nombre; al elegir, se rellenará el código <strong>A-...</strong> automáticamente.
-              </p>
-            </div>
+          <div class="pb-card-body">
 
-            <div class="md:col-span-1">
-              <label for="codzge" class="block text-sm font-medium text-slate-700">Código de Zona</label>
-              <input id="codzge" type="text" name="codzge" value="{{ old('codzge') }}"
-                data-codzge
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="A-39018" autocomplete="off" autocapitalize="off" spellcheck="false" />
-              <p class="mt-1 text-xs text-slate-500">Si se rellena, se ignorarán los códigos manuales (salvo intersección).</p>
-            </div>
+            <form
+              method="POST"
+              action="{{ route('availability.search') }}"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              class="grid grid-cols-1 gap-6 md:grid-cols-2"
+              id="availability-form">
+              @csrf
 
-            {{-- ======================== BÚSQUEDA POR HOTEL ======================== --}}
-            <div class="md:col-span-2 relative">
-              <label for="hotel_name" class="block text-sm font-medium text-slate-700">
-                Hotel (buscar por nombre)
-              </label>
-
-              <input id="hotel_name" type="text"
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Escribe el nombre del hotel (p. ej., Iberostar...)" autocomplete="off" autocapitalize="off" spellcheck="false" />
-
-              {{-- Contenedor de sugerencias --}}
-              <div id="hotel_suggestions"
-                class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-72 overflow-auto">
-                {{-- opciones via JS --}}
-              </div>
-
-              <p class="mt-1 text-xs text-slate-500">
-                Al seleccionar un hotel se añadirá su <strong>codser</strong> al campo de “Códigos de hotel”.
-                Si <strong>Código de Zona</strong> está vacío, se rellenará automáticamente con la zona del hotel.
-              </p>
-            </div>
-
-            {{-- ======================== CÓDIGOS MANUALES ======================== --}}
-            <div class="md:col-span-2">
-              <div class="flex items-center justify-between">
-                <label for="hotel_codes" class="block text-sm font-medium text-slate-700">
-                  Códigos de hotel (codser)
+              {{-- ======================== BÚSQUEDA POR ZONA ======================== --}}
+              <div class="md:col-span-1 relative">
+                <label for="area_name" class="pb-label">
+                  Área (buscar por nombre)
                 </label>
-                <span id="hotel_count" class="text-xs text-slate-500">0 hoteles</span>
-              </div>
-              <textarea id="hotel_codes" name="hotel_codes" rows="3"
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="105971, 12345&#10;67890" autocomplete="off" autocapitalize="off" spellcheck="false">{{ old('hotel_codes') }}</textarea>
-              <p class="mt-1 text-xs text-slate-500">Separados por coma, espacios o saltos de línea.</p>
-            </div>
 
-            {{-- ======================== FECHAS / ADULTOS ======================== --}}
-            @php
-            $today = date('Y-m-d');
-            @endphp
+                <input id="area_name" type="text"
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Escribe el nombre del área (p. ej., Tenerife)"
+                  autocomplete="off" autocapitalize="off" spellcheck="false" />
 
-            <div>
-              <label for="fecini" class="block text-sm font-medium text-slate-700">Fecha Inicio</label>
-              <input
-                id="fecini"
-                type="date"
-                name="fecini"
-                value="{{ old('fecini') }}"
-                required
-                min="{{ $today }}"
-                onclick="this.showPicker()"
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
-                autocomplete="off" />
-            </div>
-
-            <div>
-              <label for="fecfin" class="block text-sm font-medium text-slate-700">Fecha Fin</label>
-              <input
-                id="fecfin"
-                type="date"
-                name="fecfin"
-                value="{{ old('fecfin') }}"
-                required
-                min="{{ $today }}"
-                onclick="this.showPicker()"
-                class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
-                autocomplete="off" />
-            </div>
-
-
-
-
-            <!-- ===== Habitaciones (multihabitación con edades de niños) ===== -->
-            <div class="md:col-span-2 rounded-xl border border-slate-200 p-4">
-              <div class="flex items-center justify-between">
-                <h3 class="text-sm font-medium text-slate-700">Habitaciones</h3>
-                <button type="button" id="add-room"
-                  class="text-sm text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
-                  Añadir habitación
-                </button>
-              </div>
-
-              <!-- Template de una habitación -->
-              <template id="room-template">
-                <div class="room-row mt-4 rounded-lg border border-slate-200 p-4">
-                  <div class="flex items-center justify-between">
-                    <h4 class="text-sm font-medium text-slate-700">Habitación <span class="room-index"></span></h4>
-                    <button type="button" class="remove-room text-xs text-red-600 hover:text-red-700">Quitar</button>
-                  </div>
-
-                  <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div>
-                      <label class="block text-sm font-medium text-slate-700">Adultos</label>
-                      <input type="number" min="1" max="4" name="rooms[__i__][adl]" value="2"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 adl-input" required />
-                    </div>
-
-                    <div>
-                      <label class="block text-sm font-medium text-slate-700">Edades de los adultos</label>
-                      <div class="adult-ages-wrap grid grid-cols-3 gap-2">
-                        <!-- aquí se pintan los inputs según nº de adultos -->
-                      </div>
-
-                      <p class="mt-1 text-xs text-slate-500">Opcional. Si las indicas, se usarán para calcular FECNAC en el bloqueo.</p>
-                    </div>
-                    </br>
-                    <div>
-                      <label class="block text-sm font-medium text-slate-700">Niños</label>
-                      <input type="number" min="0" max="3" name="rooms[__i__][chd]" value="0"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 chd-input" />
-                      <p class="mt-1 text-xs text-slate-500">Máx. personas/hab: 4</p>
-                    </div>
-                    <div>
-                      <label class="block text-sm font-medium text-slate-700">Edades de los niños</label>
-                      <div class="ages-wrap grid grid-cols-3 gap-2">
-                        <!-- aquí se pintan los inputs de edades -->
-                      </div>
-                      <p class="mt-1 text-xs text-slate-500">Se generarán tantos campos como niños (0–17 años).</p>
-                    </div>
-                  </div>
+                {{-- Contenedor de sugerencias --}}
+                <div id="area_suggestions"
+                  class="pb-suggest absolute z-50 mt-2 w-full bg-white hidden max-h-72 overflow-auto">
+                  {{-- se pintan aquí las opciones --}}
                 </div>
-              </template>
 
-              <div id="rooms-container" class="mt-2"></div>
-            </div>
-
-            <div>
-              <label for="codnac" class="block text-sm font-medium text-slate-700">Código de país (ISO 3166-1)</label>
-              <input id="codnac" type="text" name="codnac" value="{{ old('codnac') }}" placeholder="ESP" maxlength="3"
-                class="mt-1 block w-32 rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
-                autocomplete="off" autocapitalize="off" spellcheck="false" />
-              <p class="mt-1 text-xs text-slate-500">ISO 3166-1 (p. ej. <strong>ESP</strong>, <strong>FRA</strong>, <strong>USA</strong>).</p>
-            </div>
-
-            {{-- ======================== OPCIONES DE RENDIMIENTO ======================== --}}
-            <div class="grid grid-cols-2 gap-4 md:col-span-2">
-              <div>
-                <label for="timeout" class="block text-sm font-medium text-slate-700">Timeout (ms)</label>
-                <input id="timeout" type="number" name="timeout" min="1000" max="60000" value="{{ old('timeout') }}" placeholder="8000"
-                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  autocomplete="off" />
+                <p class="mt-1 text-xs text-slate-500">
+                  Escribe el nombre; al elegir, se rellenará el código <strong>A-...</strong> automáticamente.
+                </p>
               </div>
 
-              <div>
-                <label for="numrst" class="block text-sm font-medium text-slate-700">
-                  Resultados por página del proveedor (numrst)
+              <div class="md:col-span-1">
+                <label for="codzge" class="pb-label">Código de Zona</label>
+                <input id="codzge" type="text" name="codzge" value="{{ old('codzge') }}"
+                  data-codzge
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="A-39018" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                <p class="mt-1 text-xs text-slate-500">Si se rellena, se ignorarán los códigos manuales (salvo intersección).</p>
+              </div>
+
+              {{-- ======================== BÚSQUEDA POR HOTEL ======================== --}}
+              <div class="md:col-span-2 relative">
+                <label for="hotel_name" class="pb-label">
+                  Hotel (buscar por nombre)
                 </label>
-                <input id="numrst" type="number" name="numrst" min="1" max="500" value="{{ old('numrst', 20) }}" placeholder="20"
+
+                <input id="hotel_name" type="text"
                   class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  autocomplete="off" />
-                <p class="mt-1 text-xs text-slate-500">Se aplica en <strong>source=provider</strong> (paginación nativa indpag/numrst)</p>
+                  placeholder="Escribe el nombre del hotel (p. ej., Iberostar...)" autocomplete="off" autocapitalize="off" spellcheck="false" />
+
+                {{-- Contenedor de sugerencias --}}
+                <div id="hotel_suggestions"
+                  class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-72 overflow-auto">
+                  {{-- opciones via JS --}}
+                </div>
+
+                <p class="mt-1 text-xs text-slate-500">
+                  Al seleccionar un hotel se añadirá su <strong>codser</strong> al campo de “Códigos de hotel”.
+                  Si <strong>Código de Zona</strong> está vacío, se rellenará automáticamente con la zona del hotel.
+                </p>
               </div>
 
-              <div class="md:col-span-2 rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div class="flex items-center justify-between p-4 md:p-5">
-                  <div>
-                    <h3 class="text-sm font-medium text-slate-700">Credenciales del proveedor (opcional)</h3>
-                    <span class="text-xs text-slate-500">Si no rellenas nada, se usan las de config()</span>
-                  </div>
-                  <button type="button" id="toggle-cred"
+              {{-- ======================== CÓDIGOS MANUALES ======================== --}}
+              <div class="md:col-span-2">
+                <div class="flex items-center justify-between">
+                  <label for="hotel_codes" class="pb-label">
+                    Códigos de hotel (codser)
+                  </label>
+                  <span id="hotel_count" class="text-xs text-slate-500">0 hoteles</span>
+                </div>
+                <textarea id="hotel_codes" name="hotel_codes" rows="3"
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="105971, 12345&#10;67890" autocomplete="off" autocapitalize="off" spellcheck="false">{{ old('hotel_codes') }}</textarea>
+                <p class="mt-1 text-xs text-slate-500">Separados por coma, espacios o saltos de línea.</p>
+              </div>
+
+              {{-- ======================== FECHAS / ADULTOS ======================== --}}
+              @php
+              $today = date('Y-m-d');
+              @endphp
+
+              <div>
+                <label for="fecini" class="pb-label">Fecha Inicio</label>
+                <input
+                  id="fecini"
+                  type="date"
+                  name="fecini"
+                  value="{{ old('fecini') }}"
+                  required
+                  min="{{ $today }}"
+                  onclick="this.showPicker()"
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
+                  autocomplete="off" />
+              </div>
+
+              <div>
+                <label for="fecfin" class="pb-label">Fecha Fin</label>
+                <input
+                  id="fecfin"
+                  type="date"
+                  name="fecfin"
+                  value="{{ old('fecfin') }}"
+                  required
+                  min="{{ $today }}"
+                  onclick="this.showPicker()"
+                  class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
+                  autocomplete="off" />
+              </div>
+
+
+
+
+              <!-- ===== Habitaciones (multihabitación con edades de niños) ===== -->
+              <div class="md:col-span-2 pb-section p-4">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-sm font-medium text-slate-700">Habitaciones</h3>
+                  <button type="button" id="add-room"
                     class="text-sm text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
-                    Mostrar
+                    Añadir habitación
                   </button>
                 </div>
 
-                <div id="cred-panel" class="hidden border-t border-slate-200 p-4 md:p-6">
+                <!-- Template de una habitación -->
+                <template id="room-template">
+                  <div class="room-row pb-room mt-4 p-4">
+                    <div class="flex items-center justify-between">
+                      <h4 class="text-sm font-medium text-slate-700">Habitación <span class="room-index"></span></h4>
+                      <button type="button" class="remove-room text-xs text-red-600 hover:text-red-700">Quitar</button>
+                    </div>
 
-                  {{-- HONEYPOT (absorbe autocompletado del navegador) --}}
-                  <div class="sr-only" aria-hidden="true" style="position:absolute; left:-9999px; top:-9999px; width:1px; height:1px; overflow:hidden;">
-                    <input type="text" name="email" autocomplete="username">
-                    <input type="password" name="password" autocomplete="current-password">
+                    <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div>
+                        <label class="pb-label">Adultos</label>
+                        <input type="number" min="1" max="4" name="rooms[__i__][adl]" value="2"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 adl-input" required />
+                      </div>
+
+                      <div>
+                        <label class="pb-label">Edades de los adultos</label>
+                        <div class="adult-ages-wrap grid grid-cols-3 gap-2">
+                          <!-- aquí se pintan los inputs según nº de adultos -->
+                        </div>
+
+                        <p class="mt-1 text-xs text-slate-500">Opcional. Si las indicas, se usarán para calcular FECNAC en el bloqueo.</p>
+                      </div>
+                      </br>
+                      <div>
+                        <label class="pb-label">Niños</label>
+                        <input type="number" min="0" max="3" name="rooms[__i__][chd]" value="0"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 chd-input" />
+                        <p class="mt-1 text-xs text-slate-500">Máx. personas/hab: 4</p>
+                      </div>
+                      <div>
+                        <label class="pb-label">Edades de los niños</label>
+                        <div class="ages-wrap grid grid-cols-3 gap-2">
+                          <!-- aquí se pintan los inputs de edades -->
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">Se generarán tantos campos como niños (0–17 años).</p>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <div id="rooms-container" class="mt-2"></div>
+              </div>
+
+              <div>
+                <label for="codnac" class="pb-label">Código de país (ISO 3166-1)</label>
+                <input id="codnac" type="text" name="codnac" value="{{ old('codnac') }}" placeholder="ESP" maxlength="3"
+                  class="mt-1 block w-32 rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
+                  autocomplete="off" autocapitalize="off" spellcheck="false" />
+                <p class="mt-1 text-xs text-slate-500">ISO 3166-1 (p. ej. <strong>ESP</strong>, <strong>FRA</strong>, <strong>USA</strong>).</p>
+              </div>
+
+              {{-- ======================== OPCIONES DE RENDIMIENTO ======================== --}}
+              <div class="grid grid-cols-2 gap-4 md:col-span-2">
+                <div>
+                  <label for="timeout" class="pb-label">Timeout (ms)</label>
+                  <input id="timeout" type="number" name="timeout" min="1000" max="60000" value="{{ old('timeout') }}" placeholder="8000"
+                    class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    autocomplete="off" />
+                </div>
+
+                <div>
+                  <label for="numrst" class="pb-label">
+                    Resultados por página del proveedor (numrst)
+                  </label>
+                  <input id="numrst" type="number" name="numrst" min="1" max="500" value="{{ old('numrst', 20) }}" placeholder="20"
+                    class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    autocomplete="off" />
+                  <p class="mt-1 text-xs text-slate-500">Se aplica en <strong>source=provider</strong> (paginación nativa indpag/numrst)</p>
+                </div>
+
+                <div class="md:col-span-2 pb-card">
+                  <div class="flex items-center justify-between p-4 md:p-5">
+                    <div>
+                      <h3 class="text-sm font-medium text-slate-700">Credenciales del proveedor (opcional)</h3>
+                      <span class="text-xs text-slate-500">Si no rellenas nada, se usan las de config()</span>
+                    </div>
+                    <button type="button" id="toggle-cred"
+                      class="text-sm text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
+                      Mostrar
+                    </button>
                   </div>
 
-                  <div class="mt-2 grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {{-- VISIBLES (UI) - sin name "real" --}}
-                    <div>
-                      <label for="endpoint_ui" class="block text-sm font-medium text-slate-700">Endpoint</label>
-                      <input id="endpoint_ui" type="url" value="{{ old('endpoint') }}" placeholder="https://api.proveedor.com/endpoint"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        autocomplete="off" autocapitalize="off" spellcheck="false">
+                  <div id="cred-panel" class="hidden border-t border-slate-200 p-4 md:p-6">
+
+                    {{-- HONEYPOT (absorbe autocompletado del navegador) --}}
+                    <div class="sr-only" aria-hidden="true" style="position:absolute; left:-9999px; top:-9999px; width:1px; height:1px; overflow:hidden;">
+                      <input type="text" name="email" autocomplete="username">
+                      <input type="password" name="password" autocomplete="current-password">
                     </div>
 
-                    <div>
-                      <label for="codsys_ui" class="block text-sm font-medium text-slate-700">codsys</label>
-                      <input id="codsys_ui" type="text" value="{{ old('codsys') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        autocomplete="off" autocapitalize="off" spellcheck="false">
-                    </div>
+                    <div class="mt-2 grid grid-cols-1 gap-4 md:grid-cols-3">
+                      {{-- VISIBLES (UI) - sin name "real" --}}
+                      <div>
+                        <label for="endpoint_ui" class="pb-label">Endpoint</label>
+                        <input id="endpoint_ui" type="url" value="{{ old('endpoint') }}" placeholder="https://api.proveedor.com/endpoint"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          autocomplete="off" autocapitalize="off" spellcheck="false">
+                      </div>
 
-                    <div>
-                      <label for="codage_ui" class="block text-sm font-medium text-slate-700">codage</label>
-                      <input id="codage_ui" type="text" value="{{ old('codage') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        autocomplete="off" autocapitalize="off" spellcheck="false">
-                    </div>
+                      <div>
+                        <label for="codsys_ui" class="pb-label">codsys</label>
+                        <input id="codsys_ui" type="text" value="{{ old('codsys') }}"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          autocomplete="off" autocapitalize="off" spellcheck="false">
+                      </div>
 
-                    <div>
-                      <label for="user_ui" class="block text-sm font-medium text-slate-700">user</label>
-                      <input id="user_ui" type="text" value="{{ old('user') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        autocomplete="off" autocapitalize="off" spellcheck="false">
-                    </div>
+                      <div>
+                        <label for="codage_ui" class="pb-label">codage</label>
+                        <input id="codage_ui" type="text" value="{{ old('codage') }}"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          autocomplete="off" autocapitalize="off" spellcheck="false">
+                      </div>
 
-                    <div>
-                      <label for="pass_ui" class="block text-sm font-medium text-slate-700">pass</label>
-                      <input id="pass_ui" type="password" placeholder="••••••••"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        autocomplete="new-password" autocapitalize="off" spellcheck="false">
-                    </div>
+                      <div>
+                        <label for="user_ui" class="pb-label">user</label>
+                        <input id="user_ui" type="text" value="{{ old('user') }}"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          autocomplete="off" autocapitalize="off" spellcheck="false">
+                      </div>
 
-                    <div>
-                      <label for="codtou_ui" class="block text-sm font-medium text-slate-700">codtou</label>
-                      <input id="codtou_ui" type="text" value="{{ old('codtou','LIB') }}"
-                        class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        autocomplete="off" autocapitalize="off" spellcheck="false">
-                    </div>
+                      <div>
+                        <label for="pass_ui" class="pb-label">pass</label>
+                        <input id="pass_ui" type="password" placeholder="••••••••"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          autocomplete="new-password" autocapitalize="off" spellcheck="false">
+                      </div>
 
-                    {{-- REALES (ocultos) que viajan en el POST --}}
-                    <input type="hidden" name="endpoint" id="endpoint_real" value="">
-                    <input type="hidden" name="codsys" id="codsys_real" value="">
-                    <input type="hidden" name="codage" id="codage_real" value="">
-                    <input type="hidden" name="user" id="user_real" value="">
-                    <input type="hidden" name="pass" id="pass_real" value="">
-                    <input type="hidden" name="codtou" id="codtou_real" value="">
+                      <div>
+                        <label for="codtou_ui" class="pb-label">codtou</label>
+                        <input id="codtou_ui" type="text" value="{{ old('codtou','LIB') }}"
+                          class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          autocomplete="off" autocapitalize="off" spellcheck="false">
+                      </div>
+
+                      {{-- REALES (ocultos) que viajan en el POST --}}
+                      <input type="hidden" name="endpoint" id="endpoint_real" value="">
+                      <input type="hidden" name="codsys" id="codsys_real" value="">
+                      <input type="hidden" name="codage" id="codage_real" value="">
+                      <input type="hidden" name="user" id="user_real" value="">
+                      <input type="hidden" name="pass" id="pass_real" value="">
+                      <input type="hidden" name="codtou" id="codtou_real" value="">
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <div class="md:col-span-2">
+                <button type="submit" id="submit-btn"
+                  class="pb-btn pb-btn-primary inline-flex items-center gap-2">
+                  <svg id="submit-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                  </svg>
+
+                  <span id="submit-text">Consultar</span>
+                </button>
+
+              </div>
+
+
+            </form>
+            <div id="loadingBox" class="hidden md:col-span-2">
+              <div class="mt-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium text-slate-700">Consultando disponibilidad…</span>
+                  <span id="progressPercent" class="text-xs text-slate-500">Cargando 0%</span>
+                </div>
+
+                <div class="mt-3" style="width:100%; height:8px; background:#e2e8f0; border-radius:9999px; overflow:hidden;">
+                  <div id="progressBarFill"
+                    style="height:100%; width:0%; background:#004665; border-radius:9999px; transition: width .12s linear;">
+                  </div>
+                </div>
+
+                <p class="mt-2 text-xs text-slate-500">Esto puede tardar unos segundos según el proveedor.</p>
+              </div>
             </div>
 
-            <div class="md:col-span-2">
-              <button type="submit"
-                class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                Consultar
-              </button>
-            </div>
-          </form>
-
+          </div>
         </div>
       </div>
     </div>
@@ -890,6 +1098,95 @@
       updateHotelCounter();
     })();
   </script>
+  <script>
+    (function() {
+      const form = document.getElementById('availability-form');
+      const btn = document.getElementById('submit-btn');
+      const text = document.getElementById('submit-text');
+
+      const loadingBox = document.getElementById('loadingBox');
+      const fillEl = document.getElementById('progressBarFill');
+      const percentEl = document.getElementById('progressPercent');
+
+      if (!form || !btn || !text || !loadingBox || !fillEl || !percentEl) return;
+
+      let locked = false;
+      let loadingInterval = null;
+      let loadingPercent = 0;
+
+      function startLoading() {
+        // Reset
+        loadingPercent = 0;
+        fillEl.style.width = '0%';
+        percentEl.textContent = 'Cargando 0%';
+
+        // Mostrar caja
+        loadingBox.classList.remove('hidden');
+
+        // Barra simulada: rápido al principio, lenta al final, se queda en 92%
+        loadingInterval = setInterval(() => {
+          const cap = 92;
+
+          if (loadingPercent < 35) loadingPercent += 3; // arranque rápido
+          else if (loadingPercent < 70) loadingPercent += 2; // medio
+          else if (loadingPercent < cap) loadingPercent += 1; // final lento
+
+          if (loadingPercent > cap) loadingPercent = cap;
+
+          fillEl.style.width = loadingPercent + '%';
+          percentEl.textContent = `Cargando ${loadingPercent}%`;
+        }, 120);
+      }
+
+      async function finishLoading() {
+        if (loadingInterval) {
+          clearInterval(loadingInterval);
+          loadingInterval = null;
+        }
+        loadingPercent = 100;
+        fillEl.style.width = '100%';
+        percentEl.textContent = 'Cargando 100%';
+        await new Promise(res => setTimeout(res, 120));
+      }
+
+      form.addEventListener('submit', async (e) => {
+        if (locked) {
+          e.preventDefault();
+          return;
+        }
+        if (!form.checkValidity()) return;
+
+        locked = true;
+
+        // UI botón
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
+        text.textContent = 'Consultando…';
+
+        // UI barra
+        startLoading();
+
+        // Nota: en submit normal la página se irá, pero por si el navegador tarda:
+        // hacemos un "finish" justo antes de salir (mejora percepción)
+        setTimeout(() => {
+          finishLoading();
+        }, 1200);
+      });
+
+      // Si el usuario vuelve atrás o el navegador restaura estado, desbloquea
+      window.addEventListener('pageshow', () => {
+        locked = false;
+        btn.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
+        text.textContent = 'Consultar';
+        loadingBox.classList.add('hidden');
+        if (loadingInterval) clearInterval(loadingInterval);
+        loadingInterval = null;
+      });
+    })();
+  </script>
+
+
 
   <style>
     input:-webkit-autofill {
