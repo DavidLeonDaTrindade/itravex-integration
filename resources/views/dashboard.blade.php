@@ -5,17 +5,37 @@
   .card-hover {
     transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease, border-color 150ms ease;
   }
-
   .card-hover:hover {
     background-color: #d1d5db;
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
     border-color: #cbd5e1;
   }
+
+  /* Fuerza tamaño del hero (evita que lo pisen estilos del layout) */
+  .hero-title {
+    font-size: 64px !important;
+    line-height: 1.02 !important;
+    font-weight: 900 !important;
+    letter-spacing: -0.04em !important;
+    color: #004665 !important;
+  }
+  @media (min-width: 768px) {
+    .hero-title { font-size: 48px !important; }
+  }
+  @media (min-width: 1024px) {
+    .hero-title { font-size: 76px !important; }
+  }
+
+  .hero-subtitle {
+    font-size: 18px !important;
+  }
+  @media (min-width: 768px) {
+    .hero-subtitle { font-size: 22px !important; }
+  }
 </style>
 
 @php
-$offset = 125;
 $db = session('db_connection', 'mysql');
 $isCli2 = $db === 'mysql_cli2';
 
@@ -31,9 +51,84 @@ $arrow = '
 @endphp
 
 <x-app-layout>
-  <div class="bg-slate-50 w-full">
-    <div class="mx-auto w-full max-w-6xl px-4 py-10">
-      <div style="transform: translateY({{ $offset }}px);">
+  <div class="min-h-[calc(100vh-64px)] bg-slate-50">
+
+    {{-- HERO: NO pegado arriba --}}
+    <section class="pt-16 pb-10 md:pt-20 md:pb-12">
+      <div class="mx-auto max-w-6xl px-4">
+
+        <div class="rounded-3xl border border-slate-200 bg-gradient-to-b from-slate-100 to-slate-50 shadow-sm">
+          <div class="px-6 py-10 md:px-12 md:py-14 text-center">
+
+            <h1 class="hero-title">
+              Bienvenido
+            </h1>
+
+            <div class="mx-auto mt-5 h-1.5 w-40 rounded-full" style="background:#FDB31B;"></div>
+
+            <p class="hero-subtitle mx-auto mt-6 max-w-3xl text-slate-700 leading-relaxed">
+              Disfruta de esta herramienta para gestionar disponibilidad y trabajar cómodamente con datos hoteleros.
+            </p>
+
+            {{-- Selector BD debajo del texto --}}
+            <div class="mt-7 flex flex-col items-center gap-3">
+              <div class="text-sm text-slate-700">
+                <span class="font-medium">Base de datos seleccionada:</span>
+                <span class="ml-2 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs
+                  @if($db==='mysql')
+                    border-blue-300 bg-blue-50 text-blue-700
+                  @else
+                    border-green-300 bg-green-50 text-green-700
+                  @endif">
+                  {{ $db === 'mysql' ? 'itravex (principal)' : 'itravex_cliente2' }}
+                </span>
+              </div>
+
+              <form method="POST" action="{{ route('db.switch') }}" class="flex flex-wrap items-center justify-center gap-2">
+                @csrf
+                <input type="hidden" name="db_connection" id="db_connection" value="{{ $db }}">
+
+                <button type="submit"
+                  onclick="document.getElementById('db_connection').value='mysql'"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 text-sm rounded-lg shadow-sm transition
+                    {{ $db==='mysql'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
+                  🗄️ itravex
+                </button>
+
+                <button type="submit"
+                  onclick="document.getElementById('db_connection').value='mysql_cli2'"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 text-sm rounded-lg shadow-sm transition
+                    {{ $db==='mysql_cli2'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
+                  🗄️ itravex_cliente2
+                </button>
+              </form>
+
+              @if($isCli2)
+                <div class="mt-2 inline-flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 text-left max-w-2xl">
+                  <span class="mt-0.5">⚠️</span>
+                  <div>
+                    <div class="font-medium">Modo itravex_cliente2</div>
+                    <div class="text-amber-700">
+                      Algunas secciones GIATA están deshabilitadas para evitar errores con esta base de datos.
+                    </div>
+                  </div>
+                </div>
+              @endif
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    {{-- Panel cards (separado del hero, NO pegado) --}}
+    <section class="pb-14">
+      <div class="mx-auto w-full max-w-6xl px-4">
 
         <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div class="px-6 py-8 md:px-10 md:py-10">
@@ -45,76 +140,10 @@ $arrow = '
               <span>db: {{ DB::connection()->getConfig('database') }}</span>
             </div>
 
-            <div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-              <header class="max-w-2xl">
-                <h1 class="text-5xl font-semibold tracking-tight" style="color:#004665 !important;">
-                  Bienvenido
-                </h1>
-                <p class="mt-4 text-lg text-slate-600 max-w-xl">
-                  Consulta disponibilidad de hoteles y realiza tu reserva fácilmente.
-                </p>
+            <div class="mt-6 border-t border-slate-200"></div>
 
-                {{-- Aviso si está en cliente2 --}}
-                @if($isCli2)
-                <div class="mt-4 inline-flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  <span class="mt-0.5">⚠️</span>
-                  <div>
-                    <div class="font-medium">Modo itravex_cliente2</div>
-                    <div class="text-amber-700">
-                      Algunas secciones GIATA están deshabilitadas para evitar errores con esta base de datos.
-                    </div>
-                  </div>
-                </div>
-                @endif
-              </header>
-
-              {{-- Selector de base de datos --}}
-              <div class="w-full md:w-auto">
-                <div class="text-sm text-slate-700 mb-3">
-                  <span class="font-medium">Base de datos activa:</span>
-                  <span class="ml-2 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs
-                    @if($db==='mysql')
-                      border-blue-300 bg-blue-50 text-blue-700
-                    @else
-                      border-green-300 bg-green-50 text-green-700
-                    @endif">
-                    {{ $db === 'mysql' ? 'itravex (principal)' : 'itravex_cliente2' }}
-                  </span>
-                </div>
-
-                <form method="POST" action="{{ route('db.switch') }}" class="flex gap-2 justify-start md:justify-end">
-                  @csrf
-                  <input type="hidden" name="db_connection" id="db_connection" value="{{ $db }}">
-
-                  <button type="submit"
-                    onclick="document.getElementById('db_connection').value='mysql'"
-                    class="inline-flex items-center gap-2 px-5 py-2.5 text-sm rounded-lg shadow-sm transition
-                      {{ $db==='mysql'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
-                    🗄️ itravex
-                  </button>
-
-                  <button type="submit"
-                    onclick="document.getElementById('db_connection').value='mysql_cli2'"
-                    class="inline-flex items-center gap-2 px-5 py-2.5 text-sm rounded-lg shadow-sm transition
-                      {{ $db==='mysql_cli2'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
-                    🗄️ itravex_cliente2
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <div class="mt-10 border-t border-slate-200"></div>
-
-            {{-- GRID DE CARDS --}}
             <div class="mt-8 grid gap-6 sm:grid-cols-2 auto-rows-fr items-stretch">
 
-              {{-- ✅ Siempre disponibles (también para cliente2) --}}
-
-              {{-- Formulario de disponibilidad --}}
               <a href="{{ route('availability.form') }}" class="{{ $cardClass }}">
                 <div class="flex items-start gap-4">
                   <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 ring-1 ring-blue-100">
@@ -135,7 +164,6 @@ $arrow = '
                 <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
               </a>
 
-              {{-- Estado de peticiones --}}
               <a href="{{ route('itravex.status') }}" class="{{ $cardClass }}">
                 <div class="flex items-start gap-4">
                   <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-100">
@@ -155,7 +183,6 @@ $arrow = '
                 <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
               </a>
 
-              {{-- Logs --}}
               <a href="{{ route('logs.itravex') }}" class="{{ $cardClass }}">
                 <div class="flex items-start gap-4">
                   <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 ring-1 ring-slate-200">
@@ -176,72 +203,68 @@ $arrow = '
                 <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
               </a>
 
-              {{-- ✅ Solo si NO es cliente2 (itravex principal) --}}
               @if(!$isCli2)
 
-              {{-- GIATA – Propiedades (CSV) --}}
-              <a href="{{ route('giata.properties.raw.index') }}" class="{{ $cardClass }}">
-                <div class="flex items-start gap-4">
-                  <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl"
-                    style="background:#00466510;border:1px solid #00466525;">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" stroke="currentColor" style="color:#004665">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"
-                        d="M4 5h16v4H4zM4 11h10v4H4zM4 17h7v2H4z" />
-                    </svg>
-                  </span>
+                <a href="{{ route('giata.properties.raw.index') }}" class="{{ $cardClass }}">
+                  <div class="flex items-start gap-4">
+                    <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl"
+                      style="background:#00466510;border:1px solid #00466525;">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" stroke="currentColor" style="color:#004665">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"
+                          d="M4 5h16v4H4zM4 11h10v4H4zM4 17h7v2H4z" />
+                      </svg>
+                    </span>
 
-                  <div class="flex-1 min-w-0 flex flex-col">
-                    <div class="flex items-start justify-between gap-3">
-                      <h2 class="text-base font-semibold text-slate-900 leading-snug">GIATA – Propiedades (CSV)</h2>
-                      {!! $arrow !!}
+                    <div class="flex-1 min-w-0 flex flex-col">
+                      <div class="flex items-start justify-between gap-3">
+                        <h2 class="text-base font-semibold text-slate-900 leading-snug">GIATA – Propiedades (CSV)</h2>
+                        {!! $arrow !!}
+                      </div>
+                      <p class="mt-2 text-sm text-slate-600">Consulta las propiedades GIATA importadas del CSV (coords, address, emails…).</p>
                     </div>
-                    <p class="mt-2 text-sm text-slate-600">Consulta las propiedades GIATA importadas del CSV (coords, address, emails…).</p>
                   </div>
-                </div>
-                <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
-              </a>
+                  <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
+                </a>
 
-              {{-- GIATA – Proveedores --}}
-              <a href="{{ route('giata.providers.index') }}" class="{{ $cardClass }}">
-                <div class="flex items-start gap-4">
-                  <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl"
-                    style="background:#00466510;border:1px solid #00466525;">
-                    <svg class="h-6 w-6" fill="none" stroke="currentColor" style="color:#004665">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 7h18M3 12h18M3 17h18M7 7v10" />
-                    </svg>
-                  </span>
+                <a href="{{ route('giata.providers.index') }}" class="{{ $cardClass }}">
+                  <div class="flex items-start gap-4">
+                    <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl"
+                      style="background:#00466510;border:1px solid #00466525;">
+                      <svg class="h-6 w-6" fill="none" stroke="currentColor" style="color:#004665">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 7h18M3 12h18M3 17h18M7 7v10" />
+                      </svg>
+                    </span>
 
-                  <div class="flex-1 min-w-0 flex flex-col">
-                    <div class="flex items-start justify-between gap-3">
-                      <h2 class="text-base font-semibold text-slate-900 leading-snug">GIATA – Proveedores</h2>
-                      {!! $arrow !!}
+                    <div class="flex-1 min-w-0 flex flex-col">
+                      <div class="flex items-start justify-between gap-3">
+                        <h2 class="text-base font-semibold text-slate-900 leading-snug">GIATA – Proveedores</h2>
+                        {!! $arrow !!}
+                      </div>
+                      <p class="mt-2 text-sm text-slate-600">Busca proveedores de GIATA por nombre y tipo (GDS / TTOO).</p>
                     </div>
-                    <p class="mt-2 text-sm text-slate-600">Busca proveedores de GIATA por nombre y tipo (GDS / TTOO).</p>
                   </div>
-                </div>
-                <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
-              </a>
+                  <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
+                </a>
 
-              {{-- GIATA – Códigos por hotel --}}
-              <a href="{{ route('giata.codes.browser') }}" class="{{ $cardClass }}">
-                <div class="flex items-start gap-4">
-                  <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl"
-                    style="background:#FDB31B15;border:1px solid #FDB31B33;">
-                    <svg class="h-6 w-6" fill="none" stroke="currentColor" style="color:#FDB31B">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 5h18M3 10h18M3 15h18M3 20h18" />
-                    </svg>
-                  </span>
+                <a href="{{ route('giata.codes.browser') }}" class="{{ $cardClass }}">
+                  <div class="flex items-start gap-4">
+                    <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl"
+                      style="background:#FDB31B15;border:1px solid #FDB31B33;">
+                      <svg class="h-6 w-6" fill="none" stroke="currentColor" style="color:#FDB31B">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 5h18M3 10h18M3 15h18M3 20h18" />
+                      </svg>
+                    </span>
 
-                  <div class="flex-1 min-w-0 flex flex-col">
-                    <div class="flex items-start justify-between gap-3">
-                      <h2 class="text-base font-semibold text-slate-900 leading-snug">GIATA – Códigos por hotel</h2>
-                      {!! $arrow !!}
+                    <div class="flex-1 min-w-0 flex flex-col">
+                      <div class="flex items-start justify-between gap-3">
+                        <h2 class="text-base font-semibold text-slate-900 leading-snug">GIATA – Códigos por hotel</h2>
+                        {!! $arrow !!}
+                      </div>
+                      <p class="mt-2 text-sm text-slate-600">Mapa de códigos por proveedor para cada hotel GIATA.</p>
                     </div>
-                    <p class="mt-2 text-sm text-slate-600">Mapa de códigos por proveedor para cada hotel GIATA.</p>
                   </div>
-                </div>
-                <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
-              </a>
+                  <div class="mt-auto pt-4 text-xs text-slate-400">Abrir módulo →</div>
+                </a>
 
               @endif
             </div>
@@ -254,6 +277,7 @@ $arrow = '
         </div>
 
       </div>
-    </div>
+    </section>
+
   </div>
 </x-app-layout>

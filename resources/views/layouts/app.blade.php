@@ -20,24 +20,20 @@ if (!isset($slot)) {
 </head>
 
 <body class="font-sans antialiased min-h-screen">
-  <div class="min-h-screen flex flex-col bg-white">
+  <div class="min-h-screen flex flex-col bg-slate-50">
+
+  {{-- HEADER BAND --}}
+  <div class="bg-slate-100 border-b border-slate-200">
     @include('layouts.navigation')
-
-    @isset($header)
-      <header class="bg-white shadow">
-        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          {{ $header }}
-        </div>
-      </header>
-    @endisset
-
-    {{-- CLAVE: main debe ser flex y ocupar el alto restante --}}
-    <main class="flex-1 ">
-    
-        {{ $slot }}
-      
-    </main>
   </div>
+
+  {{-- CONTENIDO --}}
+  <main class="flex-1">
+    {{ $slot }}
+  </main>
+
+</div>
+
 </body>
 </html>
 
