@@ -1,29 +1,77 @@
 {{-- resources/views/giata/codes.blade.php --}}
 
 <style>
-  .per-page-select { padding-right: 2.2rem !important; }
+  .per-page-select {
+    padding-right: 2.2rem !important;
+  }
 
   /* Barra de progreso + porcentaje */
-  .progress-wrapper { max-width: 420px; margin: 0 auto; text-align: center; }
-  .progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; width: 0%; background: #004665; border-radius: 9999px; transition: width 0.15s linear; }
-  .progress-percent { margin-top: 0.5rem; font-size: 0.75rem; color: #64748b; }
+  .progress-wrapper {
+    max-width: 420px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: #004665;
+    border-radius: 9999px;
+    transition: width 0.15s linear;
+  }
+
+  .progress-percent {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: #64748b;
+  }
 
   /* Dropdown providers */
-  #provOptions li { padding: 0.5rem 0.75rem; cursor: pointer; }
-  #provOptions li:hover { background: #f8fafc; } /* slate-50 */
-  #provOptions li.active { background: #e2e8f0; } /* slate-200 */
+  #provOptions li {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+  }
 
-  .prov-chip{
-    display:inline-flex; align-items:center; gap:.35rem;
-    border:1px solid #cbd5e1; border-radius:9999px;
-    padding:.25rem .5rem; font-size:12px; background:#fff;
+  #provOptions li:hover {
+    background: #f8fafc;
   }
-  .prov-chip button{
-    border:0; background:transparent; cursor:pointer;
-    color:#64748b;
+
+  /* slate-50 */
+  #provOptions li.active {
+    background: #e2e8f0;
   }
-  .prov-chip button:hover{ color:#0f172a; }
+
+  /* slate-200 */
+
+  .prov-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    padding: .25rem .5rem;
+    font-size: 12px;
+    background: #fff;
+  }
+
+  .prov-chip button {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: #64748b;
+  }
+
+  .prov-chip button:hover {
+    color: #0f172a;
+  }
 </style>
 
 <x-app-layout>
@@ -40,20 +88,20 @@
 
         {{-- Mensaje de éxito al cargar GIATA --}}
         @if (session('status'))
-          <div class="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
-            {{ session('status') }}
-          </div>
+        <div class="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+          {{ session('status') }}
+        </div>
         @endif
 
         {{-- Errores (por ejemplo del XLSX) --}}
         @if ($errors->any())
-          <div class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            <ul class="list-disc list-inside space-y-1">
-              @foreach ($errors->all() as $error)
-                <li>{{ $error }}</li>
-              @endforeach
-            </ul>
-          </div>
+        <div class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <ul class="list-disc list-inside space-y-1">
+            @foreach ($errors->all() as $error)
+            <li>{{ $error }}</li>
+            @endforeach
+          </ul>
+        </div>
         @endif
 
         <div class="rounded-2xl border border-slate-200 bg-white px-6 py-4">
@@ -62,11 +110,11 @@
             <div class="flex flex-col gap-2 w-full md:w-[420px]">
               <div class="flex items-center gap-2">
                 <input id="hotelSearch"
-                       list="hotelList"
-                       placeholder="Buscar hotel (nombre, etc.)…"
-                       class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
+                  list="hotelList"
+                  placeholder="Buscar hotel (nombre, etc.)…"
+                  class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
                 <button id="clearHotel"
-                        class="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
+                  class="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
                   Limpiar
                 </button>
               </div>
@@ -95,27 +143,27 @@
             <div class="relative w-full min-w-[320px]">
               <div class="flex items-center gap-2">
                 <input id="provMulti"
-                       type="text"
-                       autocomplete="off"
-                       placeholder="Escribe para buscar… (Enter para añadir)"
-                       class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Escribe para buscar… (Enter para añadir)"
+                  class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300" />
 
                 <button id="provToggle"
-                        type="button"
-                        class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50"
-                        aria-label="Abrir lista">
+                  type="button"
+                  class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50"
+                  aria-label="Abrir lista">
                   ▾
                 </button>
 
                 <button id="clearProv"
-                        type="button"
-                        class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
+                  type="button"
+                  class="rounded-md border border-slate-300 px-2 py-2 text-xs hover:bg-slate-50">
                   Limpiar
                 </button>
               </div>
 
               <div id="provDropdown"
-                   class="hidden absolute z-30 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg overflow-hidden">
+                class="hidden absolute z-30 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg overflow-hidden">
                 <ul id="provOptions" class="max-h-60 overflow-auto text-sm"></ul>
               </div>
             </div>
@@ -135,14 +183,14 @@
         <div class="flex flex-col md:flex-row md:items-center gap-3 mt-4">
           {{-- Form solo para subir el XLSX con GIATA --}}
           <form method="POST"
-                action="{{ route('giata.codes.uploadGiata') }}"
-                enctype="multipart/form-data"
-                class="flex flex-col gap-2 md:flex-row md:items-end">
+            action="{{ route('giata.codes.uploadGiata') }}"
+            enctype="multipart/form-data"
+            class="flex flex-col gap-2 md:flex-row md:items-end">
             @csrf
             <div class="flex flex-col gap-1 w-full md:w-[320px]">
               <label class="text-sm text-slate-600">Cargar GIATA desde Excel (.xlsx)</label>
               <input type="file" name="giata_file"
-                     class="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs shadow-sm
+                class="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs shadow-sm
                             focus:border-blue-500 focus:ring-blue-500">
               <small class="text-[11px] text-slate-500">
                 Excel con una sola columna <strong>GIATA</strong>
@@ -151,10 +199,10 @@
             </div>
 
             <button type="submit"
-                    class="inline-flex items-center rounded-md px-3 py-2 text-xs font-medium text-white shadow-sm mt-2 md:mt-0"
-                    style="background:#004665; border:1px solid #00354b;"
-                    onmouseover="this.style.background='#00354b'"
-                    onmouseout="this.style.background='#004665'">
+              class="inline-flex items-center rounded-md px-3 py-2 text-xs font-medium text-white shadow-sm mt-2 md:mt-0"
+              style="background:#004665; border:1px solid #00354b;"
+              onmouseover="this.style.background='#00354b'"
+              onmouseout="this.style.background='#004665'">
               Cargar lista GIATA
             </button>
           </form>
@@ -164,14 +212,14 @@
             <div class="flex items-center justify-between gap-2">
               <label class="text-sm text-slate-600">Filtro de GIATA (lista de IDs)</label>
               <button id="clearGiata" type="button"
-                      class="rounded-md border border-slate-300 px-2 py-1 text-[11px] hover:bg-slate-50">
+                class="rounded-md border border-slate-300 px-2 py-1 text-[11px] hover:bg-slate-50">
                 Limpiar GIATA
               </button>
             </div>
             <textarea id="giataFilter"
-                      rows="3"
-                      placeholder="Ej: 123456, 789012, 345678..."
-                      class="w-full rounded-md border border-slate-300 px-3 py-2 text-[11px] shadow-sm
+              rows="3"
+              placeholder="Ej: 123456, 789012, 345678..."
+              class="w-full rounded-md border border-slate-300 px-3 py-2 text-[11px] shadow-sm
                              focus:border-blue-500 focus:ring-blue-500">@if(!empty($giataIdsString)){{ $giataIdsString }}@endif</textarea>
             <small class="text-[11px] text-slate-500">
               Aquí se rellenan los códigos desde el Excel. También puedes pegarlos/editar a mano
@@ -203,7 +251,7 @@
           <div id="metaText" class="text-slate-600">—</div>
 
           <div class="flex gap-2">
-            <button id="btnExport" class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
+            <button id="btnExport" type="button" class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-100">
               Exportar Excel
             </button>
 
@@ -215,14 +263,16 @@
       </div>
     </div>
   </div>
-
   <script>
     (function() {
       const qs = (s, el = document) => el.querySelector(s);
       const qsa = (s, el = document) => Array.from(el.querySelectorAll(s));
 
+      console.log('GIATA JS CARGADO ✅');
+
       const apiUrl = "{{ url('/giata/codes') }}";
       const hotelsApiUrl = "{{ url('/giata/hotels-suggest') }}";
+      const exportUrl = "{{ route('giata.codes.export') }}";
 
       const perSel = qs('#perPage');
       const rowsEl = qs('#rowsBody');
@@ -358,9 +408,9 @@
           const tdHotel = document.createElement('td');
           tdHotel.className = 'sticky left-0 z-10 bg-inherit p-3 border-b align-top';
           tdHotel.innerHTML = `
-            <div class="font-medium">${r.hotel_name ?? '—'}</div>
-            <div class="text-xs text-slate-500">GIATA #${r.giata_id}</div>
-          `;
+          <div class="font-medium">${r.hotel_name ?? '—'}</div>
+          <div class="text-xs text-slate-500">GIATA #${r.giata_id}</div>
+        `;
           tr.appendChild(tdHotel);
 
           providers.forEach(p => {
@@ -377,25 +427,23 @@
       // ==========================
       const setLoading = () => {
         rowsEl.innerHTML = `
-          <tr>
-            <td colspan="99" class="p-6">
-              <div class="progress-wrapper">
-                <div class="progress-bar">
-                  <div id="progressBarFill" class="progress-bar-fill"></div>
-                </div>
-                <div id="progressPercent" class="progress-percent">Cargando 0%</div>
+        <tr>
+          <td colspan="99" class="p-6">
+            <div class="progress-wrapper">
+              <div class="progress-bar">
+                <div id="progressBarFill" class="progress-bar-fill"></div>
               </div>
-            </td>
-          </tr>
-        `;
+              <div id="progressPercent" class="progress-percent">Cargando 0%</div>
+            </div>
+          </td>
+        </tr>
+      `;
 
         loadingPercent = 0;
-
         const fillEl = document.getElementById('progressBarFill');
         const textEl = document.getElementById('progressPercent');
 
         if (loadingInterval) clearInterval(loadingInterval);
-
         loadingInterval = setInterval(() => {
           if (loadingPercent < 90) {
             loadingPercent += 5;
@@ -422,7 +470,7 @@
       };
 
       // ==========================
-      // Providers multi-select (dropdown propio)
+      // Providers multi-select
       // ==========================
       let dropdownOpen = false;
       let activeIdx = -1;
@@ -442,9 +490,7 @@
         paintOptions();
       };
 
-      const toggleDropdown = () => {
-        dropdownOpen ? closeDropdown() : openDropdown();
-      };
+      const toggleDropdown = () => dropdownOpen ? closeDropdown() : openDropdown();
 
       const isSelected = (code) =>
         selectedCodes.some(c => String(c).toLowerCase() === String(code).toLowerCase());
@@ -483,14 +529,13 @@
       };
 
       const renderSelectedCodes = () => {
-        provSelected.textContent = selectedCodes.length
-          ? `Seleccionados: ${selectedCodes.join(', ')}`
-          : 'Sin proveedores seleccionados.';
+        provSelected.textContent = selectedCodes.length ?
+          `Seleccionados: ${selectedCodes.join(', ')}` :
+          'Sin proveedores seleccionados.';
       };
 
       const paintOptions = () => {
         if (!provOptions) return;
-
         provOptions.innerHTML = '';
 
         if (!filteredProviders.length) {
@@ -512,14 +557,14 @@
           li.textContent = `${label} (${code})${selectedMark}`;
 
           li.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // evita perder foco
+            e.preventDefault();
             if (!isSelected(code) && selectedCodes.length < 10) {
               addProvider(code);
               page = 1;
               fetchPage();
             }
             provMulti.focus();
-            openDropdown(); // mantener abierto
+            openDropdown();
             filterOptions(provMulti.value);
           });
 
@@ -528,7 +573,9 @@
 
         if (activeIdx >= 0) {
           const activeEl = provOptions.children[activeIdx];
-          activeEl?.scrollIntoView({ block: 'nearest' });
+          activeEl?.scrollIntoView({
+            block: 'nearest'
+          });
         }
       };
 
@@ -554,7 +601,6 @@
         paintOptions();
       };
 
-      // Devuelve los objetos proveedor a partir de selectedCodes (para columnas)
       const getSelectedProviders = () => {
         const lower = selectedCodes.map(c => String(c).toLowerCase());
         return allProviders.filter(p =>
@@ -562,7 +608,6 @@
         );
       };
 
-      // Si no hay selección, filtra proveedores con data en la página
       const filterProvidersWithData = (rows) => {
         const selected = getSelectedProviders();
         if (selected.length) return selected;
@@ -595,16 +640,13 @@
 
           const term = (hotelSearch.value || '').trim();
 
-          // GIATA ids
           let giataIds = [];
-          if (giataFilter) {
-            const giataRaw = (giataFilter.value || '').trim();
-            if (giataRaw) {
-              giataIds = giataRaw
-                .split(/[\s,;]+/)
-                .map(v => v.trim())
-                .filter(v => v !== '' && /^\d+$/.test(v));
-            }
+          const giataRaw = (giataFilter?.value || '').trim();
+          if (giataRaw) {
+            giataIds = giataRaw
+              .split(/[\s,;]+/)
+              .map(v => v.trim())
+              .filter(v => v !== '' && /^\d+$/.test(v));
           }
 
           const USE_POST_THRESHOLD = 500;
@@ -614,19 +656,16 @@
 
           if (!usePost) {
             const params = new URLSearchParams();
-
             if (term) params.set('q', term);
             giataIds.forEach(id => params.append('giata_ids[]', id));
-
-            if (selectedCodes.length) {
-              selectedCodes.forEach(code => params.append('providers[]', code));
-            }
-
+            selectedCodes.forEach(code => params.append('providers[]', code));
             params.set('per_page', perSel.value);
             params.set('page', String(page));
 
             res = await fetch(`${apiUrl}?${params.toString()}`, {
-              headers: { 'Accept': 'application/json' }
+              headers: {
+                'Accept': 'application/json'
+              }
             });
           } else {
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -636,7 +675,9 @@
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {})
+                ...(csrf ? {
+                  'X-CSRF-TOKEN': csrf
+                } : {})
               },
               body: JSON.stringify({
                 q: term || null,
@@ -650,49 +691,47 @@
 
           if (!res.ok) {
             const text = await res.text();
-            if (loadingInterval) { clearInterval(loadingInterval); loadingInterval = null; }
+            if (loadingInterval) {
+              clearInterval(loadingInterval);
+              loadingInterval = null;
+            }
             console.error('Error HTTP', res.status, text);
-            rowsEl.innerHTML = `
-              <tr>
-                <td class="p-4 text-red-600" colspan="99">
-                  Error ${res.status}. Mira consola para detalles.
-                </td>
-              </tr>`;
+            rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">Error ${res.status}. Mira consola.</td></tr>`;
             return;
           }
 
           const contentType = res.headers.get('content-type') || '';
           if (!contentType.includes('application/json')) {
             const text = await res.text();
-            if (loadingInterval) { clearInterval(loadingInterval); loadingInterval = null; }
+            if (loadingInterval) {
+              clearInterval(loadingInterval);
+              loadingInterval = null;
+            }
             console.error('Respuesta no JSON:', text);
-            rowsEl.innerHTML = `
-              <tr>
-                <td class="p-4 text-red-600" colspan="99">
-                  El servidor devolvió HTML en vez de JSON. Mira consola.
-                </td>
-              </tr>`;
+            rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">El servidor devolvió HTML en vez de JSON.</td></tr>`;
             return;
           }
 
           const json = await res.json();
-
           await finishLoading();
 
-          // cache providers
           if (!allProviders.length && Array.isArray(json.providers)) {
             allProviders = json.providers;
-            filterOptions(''); // prepara dropdown
+            filterOptions('');
           }
 
-          const rows = json.data || [];
-          lastRows = rows;
+          lastRows = json.data || [];
+          providers = filterProvidersWithData(lastRows);
 
-          providers = filterProvidersWithData(rows);
           renderProvidersHeader();
-          renderRows(rows);
+          renderRows(lastRows);
 
-          const m = json.meta || { current_page: 1, last_page: 1, total: 0, per_page: perSel.value };
+          const m = json.meta || {
+            current_page: 1,
+            last_page: 1,
+            total: 0,
+            per_page: perSel.value
+          };
           page = m.current_page;
 
           metaEl.textContent = `Página ${m.current_page} de ${m.last_page} · ${m.total} resultados`;
@@ -700,58 +739,110 @@
           nextBtn.disabled = (page >= m.last_page);
 
         } catch (e) {
-          if (loadingInterval) { clearInterval(loadingInterval); loadingInterval = null; }
+          if (loadingInterval) {
+            clearInterval(loadingInterval);
+            loadingInterval = null;
+          }
           console.error(e);
-          rowsEl.innerHTML = `
-            <tr>
-              <td class="p-4 text-red-600" colspan="99">
-                Error de red o de parseo JSON (mira la consola).
-              </td>
-            </tr>`;
+          rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">Error de red o parseo JSON.</td></tr>`;
         }
       };
 
-      // ======================
-      // Exportar tabla actual a CSV
-      // ======================
-      function exportCurrentTableToCsv() {
-        if (!lastRows.length || !providers.length) {
-          alert('No hay datos que exportar.');
-          return;
+      // ==========================
+      // Export (POST server-side)
+      // ==========================
+      async function handleExport(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        console.log('EXPORT: click ✅');
+
+        const term = (hotelSearch.value || '').trim();
+
+        let giataIds = [];
+        const giataRaw = (giataFilter?.value || '').trim();
+        if (giataRaw) {
+          giataIds = giataRaw
+            .split(/[\s,;]+/)
+            .map(v => v.trim())
+            .filter(v => v !== '' && /^\d+$/.test(v));
         }
 
-        const header = ['Hotel', 'GIATA ID', ...providers.map(p => p.name || p.provider_code || '')];
+        const payload = {
+          q: term || null,
+          per_page: Number(perSel.value),
+          page: Number(page),
+          giata_ids: giataIds,
+          providers: selectedCodes,
+          export_all: true  
+        };
 
-        const dataRows = lastRows.map(r => {
-          const row = [r.hotel_name ?? '', r.giata_id ?? ''];
-          providers.forEach(p => {
-            const value = (r.codes && r.codes[p.id]) ? String(r.codes[p.id]) : '';
-            row.push(value.replace(/\s+/g, ' '));
-          });
-          return row;
+        console.log('EXPORT payload', {
+          q: payload.q,
+          per_page: payload.per_page,
+          page: payload.page,
+          giata_ids_len: payload.giata_ids.length,
+          providers_len: payload.providers.length
         });
 
-        const allRows = [header, ...dataRows];
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+        console.log('CSRF?', !!csrf);
 
-        const csv = allRows
-          .map(cols => cols.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-          .join('\r\n');
+        try {
+          const res = await fetch(exportUrl, {
+            method: 'POST',
+            headers: {
+              'Accept': 'text/csv',
+              'Content-Type': 'application/json',
+              ...(csrf ? {
+                'X-CSRF-TOKEN': csrf
+              } : {})
+            },
+            body: JSON.stringify(payload)
+          });
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
+          console.log('EXPORT status', res.status, res.headers.get('content-type'));
 
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `giata_codes_page_${page}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+          if (!res.ok) {
+            const text = await res.text();
+            console.error('EXPORT FAIL', res.status, text.slice(0, 800));
+            alert(`Error exportando (${res.status}). Mira consola.`);
+            return;
+          }
+
+          const blob = await res.blob();
+          console.log('EXPORT blob size', blob.size);
+
+          const disposition = res.headers.get('content-disposition') || '';
+          const match = disposition.match(/filename="?([^"]+)"?/i);
+          const filename = match?.[1] || `giata_codes_page_${page}.csv`;
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+            a.remove();
+          }, 0);
+
+          console.log('EXPORT OK ✅');
+        } catch (err) {
+          console.error('EXPORT exception', err);
+          alert('Error exportando. Mira consola.');
+        }
       }
 
-      // ======================
+      // Enganchar export SOLO una vez
+      btnExport?.addEventListener('click', handleExport, true);
+
+      // ==========================
       // Autocomplete hoteles
-      // ======================
+      // ==========================
       let hotelAbortController = null;
 
       async function fetchHotelSuggestions(term) {
@@ -764,10 +855,14 @@
         hotelAbortController = new AbortController();
 
         try {
-          const params = new URLSearchParams({ q: term });
+          const params = new URLSearchParams({
+            q: term
+          });
           const res = await fetch(`${hotelsApiUrl}?${params.toString()}`, {
-            headers: { 'Accept': 'application/json' },
-            signal: hotelAbortController.signal,
+            headers: {
+              'Accept': 'application/json'
+            },
+            signal: hotelAbortController.signal
           });
           if (!res.ok) return;
 
@@ -780,7 +875,8 @@
             opt.label = `${h.name || ''} (GIATA: ${h.giata_id ?? '—'})`;
             hotelList.appendChild(opt);
           });
-        } catch (e) { /* ignore aborts */ }
+        } catch (e) {
+          /* ignore abort */ }
       }
 
       hotelSearch.addEventListener('input', (e) => fetchHotelSuggestions(e.target.value || ''));
@@ -808,15 +904,24 @@
       });
 
       // ======================
-      // Eventos paginación / filtros
+      // Paginación / filtros
       // ======================
-      perSel.addEventListener('change', () => { page = 1; fetchPage(); });
-
-      prevBtn.addEventListener('click', () => {
-        if (page > 1) { page--; fetchPage(); }
+      perSel.addEventListener('change', () => {
+        page = 1;
+        fetchPage();
       });
 
-      nextBtn.addEventListener('click', () => { page++; fetchPage(); });
+      prevBtn.addEventListener('click', () => {
+        if (page > 1) {
+          page--;
+          fetchPage();
+        }
+      });
+
+      nextBtn.addEventListener('click', () => {
+        page++;
+        fetchPage();
+      });
 
       clearGiata?.addEventListener('click', () => {
         giataFilter.value = '';
@@ -824,11 +929,8 @@
         fetchPage();
       });
 
-      // Exportar
-      btnExport.addEventListener('click', exportCurrentTableToCsv);
-
       // ======================
-      // Eventos dropdown providers
+      // Dropdown providers events
       // ======================
       provToggle?.addEventListener('click', () => {
         toggleDropdown();
@@ -904,8 +1006,8 @@
       renderSelectedCodes();
       fetchPage();
 
-      // IMPORTANTE:
-      // Route::match(['GET','POST'], '/giata/codes', [GiataCodesController::class,'index']);
     })();
   </script>
+
+
 </x-app-layout>

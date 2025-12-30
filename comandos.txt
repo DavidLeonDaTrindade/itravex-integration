@@ -1,0 +1,57 @@
+$defaultProviders = [
+            'abbey_lc', --> hecho
+            'abbey_tp', --> hecho
+            'allbeds', --> hecho
+            'alturadestinationservices',
+            'ask2travel',
+            'babylon_holiday',
+            'barcelo',
+            'cn_travel',
+            'connectycs',
+            'darinaholidays',
+            'DOTW',
+            'dts_dieuxtravelservices',
+            'gekko_infinite',
+            'gekko_teldar',
+            'guestincoming',
+            'hotelbook',
+            'hyperguest',
+            'iol_iwtx',
+            'itravex',
+            'logitravel_dr',
+            'methabook2',
+            'mikitravel',
+            'opentours',
+            'ors_beds',
+            'paximum',
+            'ratehawk2',
+            'restel',
+            'solole',
+            'sunhotels',
+            'travellanda',
+            'veturis',
+            'w2m',
+            'wl2t',
+            'yalago',
+            'travco',
+        ];
+----------------------------------------------------------------------------
+SABER CUANTOS DUPLICADOS HAY
+----------------------------------------------------------------------------
+        SELECT g.*
+FROM giata_property_codes g
+JOIN (
+    SELECT giata_property_id, provider_id, code_value
+    FROM giata_property_codes
+    GROUP BY giata_property_id, provider_id, code_value
+    HAVING COUNT(*) > 1
+) d
+ON g.giata_property_id = d.giata_property_id
+AND g.provider_id = d.provider_id
+AND g.code_value = d.code_value
+ORDER BY g.giata_property_id, g.provider_id, g.code_value, g.id;
+----------------------------------------------------------------------------
+SABER CUANTOS REGISTROS HAY
+----------------------------------------------------------------------------
+SELECT COUNT(*) AS total_registros
+FROM giata_property_codes;

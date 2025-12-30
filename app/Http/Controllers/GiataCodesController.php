@@ -6,6 +6,8 @@ use App\Models\GiataProperty;
 use App\Models\GiataProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Str;
 
 class GiataCodesController extends Controller
 {
@@ -152,6 +154,125 @@ class GiataCodesController extends Controller
             throw $e;
         }
     }
+
+    public function export(Request $req): StreamedResponse
+    {
+        $search = trim((string) $req->input('q', ''));
+
+        // ✅ flag para exportar TODO
+        $exportAll = (bool) $req->input('export_all', false);
+
+        // Si NO exportAll, respeta paginación
+        $perPage = max(5, min((int) $req->input('per_page', 25), 200));
+        $page    = max(1, (int) $req->input('page', 1));
+
+        // providers[] (provider_code)
+        $providerCodesFilter = (array) $req->input('providers', []);
+        $providerCodesFilter = array_values(array_filter($providerCodesFilter, fn($v) => trim((string)$v) !== ''));
+
+        // giata_ids[]
+        $giataIds = (array) $req->input('giata_ids', []);
+        $giataIds = array_values(array_unique(array_filter($giataIds, function ($v) {
+            $v = trim((string)$v);
+            return $v !== '' && preg_match('/^\d+$/', $v);
+        })));
+
+        // Providers (columnas)
+        $providersQuery = GiataProvider::query()->orderBy('provider_code');
+        if (!empty($providerCodesFilter)) {
+            $providersQuery->whereIn('provider_code', $providerCodesFilter);
+        }
+        $providers = $providersQuery->get(['id', 'provider_code', 'provider_type']);
+
+        $providerFilterIds = !empty($providerCodesFilter) ? $providers->pluck('id') : collect();
+
+        // Query base igual que index()
+        $query = GiataProperty::query()
+            ->with(['codes' => function ($q) use ($providerFilterIds) {
+                $q->active()->with('provider:id,provider_code,provider_type');
+                if ($providerFilterIds->isNotEmpty()) {
+                    $q->whereIn('provider_id', $providerFilterIds);
+                }
+            }]);
+
+        if (!empty($giataIds)) {
+            $query->whereIn('giata_id', $giataIds);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                if (ctype_digit($search)) {
+                    $q->orWhere('giata_id', (int) $search);
+                }
+                $q->orWhere('name', 'like', "%{$search}%");
+                $q->orWhereHas('codes', function ($qc) use ($search) {
+                    $qc->where('code_value', 'like', "%{$search}%");
+                });
+                $q->orWhereHas('codes.provider', function ($qp) use ($search) {
+                    $qp->where('provider_code', 'like', "%{$search}%");
+                });
+            });
+        }
+
+        $safeQ = $search !== '' ? Str::slug(Str::limit($search, 40, ''), '_') : 'all';
+        $filename = $exportAll
+            ? "giata_codes_{$safeQ}_ALL.csv"
+            : "giata_codes_{$safeQ}_page_{$page}.csv";
+
+        return response()->streamDownload(function () use ($providers, $query, $exportAll, $perPage, $page) {
+            $out = fopen('php://output', 'w');
+
+            // BOM UTF-8 para Excel
+            fwrite($out, "\xEF\xBB\xBF");
+
+            // header
+            $header = array_merge(['Hotel', 'GIATA ID'], $providers->pluck('provider_code')->all());
+            fputcsv($out, $header, ';');
+
+            // Helper para escribir una fila
+            $writeProp = function ($prop) use ($out, $providers) {
+                $map = [];
+                foreach ($prop->codes as $c) {
+                    $map[$c->provider_id] = isset($map[$c->provider_id])
+                        ? ($map[$c->provider_id] . ' | ' . $c->code_value)
+                        : $c->code_value;
+                }
+
+                $line = [$prop->name ?? '', (string)$prop->giata_id];
+
+                foreach ($providers as $p) {
+                    $val = $map[$p->id] ?? '';
+                    $val = preg_replace('/\s+/', ' ', (string)$val);
+                    $line[] = $val;
+                }
+
+                fputcsv($out, $line, ';');
+            };
+
+            if ($exportAll) {
+                // ✅ Exportar TODO (sin paginación) en chunks para no petar memoria
+                $query->orderBy('name')->chunk(300, function ($chunk) use ($writeProp, $out) {
+                    foreach ($chunk as $prop) {
+                        $writeProp($prop);
+                    }
+                    fflush($out);
+                });
+            } else {
+                // Exportar solo la página actual
+                $pageObj = $query->orderBy('name')->paginate($perPage, ['*'], 'page', $page);
+                foreach ($pageObj->items() as $prop) {
+                    $writeProp($prop);
+                }
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type'  => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache',
+        ]);
+    }
+
+
 
     public function browser()
     {

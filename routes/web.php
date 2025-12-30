@@ -133,8 +133,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/giata/providers/search', [GiataProviderController::class, 'search'])
         ->name('giata.providers.search'); // ← nueva ruta JSON
 
-    Route::match(['GET','POST'], '/giata/codes', [GiataCodesController::class, 'index'])
-    ->name('giata.codes.index');
+    Route::match(['GET', 'POST'], '/giata/codes', [GiataCodesController::class, 'index'])
+        ->name('giata.codes.index');
 
 
     Route::get('/giata/codes/browser', [GiataCodesController::class, 'browser'])
@@ -165,6 +165,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/giata/codes/upload-giata', [GiataCodesBrowserController::class, 'uploadGiata'])
         ->name('giata.codes.uploadGiata');
+
+    Route::post('/giata/codes/export', [GiataCodesController::class, 'export'])
+        ->name('giata.codes.export');
 });
 
 require __DIR__ . '/auth.php';
