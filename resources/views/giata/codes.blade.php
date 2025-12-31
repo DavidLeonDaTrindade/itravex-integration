@@ -270,6 +270,23 @@
 
       console.log('GIATA JS CARGADO ✅');
 
+      const perf = {
+        last: null,
+        fmt(ms) {
+          return `${ms.toFixed(0)} ms`;
+        },
+        now() {
+          return performance.now();
+        }
+      };
+
+      function logPerf(label, t0) {
+        const ms = perf.now() - t0;
+        console.log(`⏱️ ${label}: ${perf.fmt(ms)}`);
+        return ms;
+      }
+
+
       const apiUrl = "{{ url('/giata/codes') }}";
       const hotelsApiUrl = "{{ url('/giata/hotels-suggest') }}";
       const exportUrl = "{{ route('giata.codes.export') }}";
@@ -300,6 +317,7 @@
       let allProviders = [];
       let providers = [];
       let page = 1;
+      let hotelSuggestMap = {}; // name -> giata_id
 
       let lastRows = [];
       let selectedCodes = [];
@@ -307,6 +325,7 @@
       // loading fake bar
       let loadingInterval = null;
       let loadingPercent = 0;
+      let lastPickWasSuggestion = false;
 
       // ==========================
       // Helpers UI / parse
@@ -638,7 +657,9 @@
         try {
           setLoading();
 
-          const term = (hotelSearch.value || '').trim();
+          let term = (hotelSearch.value || '').trim();
+          const tAll = perf.now();
+          const tReq = perf.now();
 
           let giataIds = [];
           const giataRaw = (giataFilter?.value || '').trim();
@@ -647,6 +668,11 @@
               .split(/[\s,;]+/)
               .map(v => v.trim())
               .filter(v => v !== '' && /^\d+$/.test(v));
+          }
+          // no filtres por nombre (para no machacar la lista)
+          if (lastPickWasSuggestion || giataIds.length) {
+            term = '';
+            lastPickWasSuggestion = false;
           }
 
           const USE_POST_THRESHOLD = 500;
@@ -711,8 +737,12 @@
             rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">El servidor devolvió HTML en vez de JSON.</td></tr>`;
             return;
           }
-
+          logPerf('HTTP (hasta headers OK)', tReq);
+          const tJson = perf.now();
           const json = await res.json();
+          logPerf('JSON parse', tJson);
+          const tCompute = perf.now();
+
           await finishLoading();
 
           if (!allProviders.length && Array.isArray(json.providers)) {
@@ -722,9 +752,15 @@
 
           lastRows = json.data || [];
           providers = filterProvidersWithData(lastRows);
+          logPerf('compute providers (filterProvidersWithData)', tCompute);
+          const tRender = perf.now();
+
 
           renderProvidersHeader();
           renderRows(lastRows);
+          logPerf('render DOM (header+rows)', tRender);
+          logPerf('TOTAL fetchPage()', tAll);
+
 
           const m = json.meta || {
             current_page: 1,
@@ -774,7 +810,7 @@
           page: Number(page),
           giata_ids: giataIds,
           providers: selectedCodes,
-          export_all: true  
+          export_all: true
         };
 
         console.log('EXPORT payload', {
@@ -868,15 +904,18 @@
 
           const data = await res.json();
           hotelList.innerHTML = '';
+          hotelSuggestMap = {};
 
           data.forEach(h => {
+            hotelSuggestMap[h.name] = h.giata_id;
             const opt = document.createElement('option');
             opt.value = h.name || '';
             opt.label = `${h.name || ''} (GIATA: ${h.giata_id ?? '—'})`;
             hotelList.appendChild(opt);
           });
         } catch (e) {
-          /* ignore abort */ }
+          /* ignore abort */
+        }
       }
 
       hotelSearch.addEventListener('input', (e) => fetchHotelSuggestions(e.target.value || ''));
@@ -884,6 +923,26 @@
       function applyHotelSelection() {
         const name = (hotelSearch.value || '').trim();
         if (!name) return;
+
+        const gid = hotelSuggestMap[name];
+
+        // Si viene de sugerencia (tiene GIATA), lo añadimos a la lista
+        if (gid) {
+          const current = (giataFilter.value || '').trim();
+          const parts = current ?
+            current.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean) : [];
+
+          const set = new Set(parts);
+          set.add(String(gid));
+          giataFilter.value = Array.from(set).join(', ');
+
+          lastPickWasSuggestion = true;
+
+          // opcional pero recomendado: deja el campo listo para buscar otro
+          hotelSearch.value = '';
+          hotelList.innerHTML = '';
+        }
+
         page = 1;
         fetchPage();
       }
@@ -1007,6 +1066,10 @@
       fetchPage();
 
     })();
+
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) window.location.reload();
+    });
   </script>
 
 

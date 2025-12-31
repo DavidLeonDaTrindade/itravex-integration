@@ -54,7 +54,8 @@ class GiataCodesBrowserController extends Controller
         $giataIdsString = implode(', ', $giataIds);
 
         // Guardamos en sesión para que index() lo pinte en el textarea
-        session(['giata_ids_string' => $giataIdsString]);
+        session()->flash('giata_ids_string', $giataIdsString);
+
 
         return redirect()
             ->route('giata.codes.browser')

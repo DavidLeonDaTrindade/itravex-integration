@@ -29,7 +29,6 @@ class GiataSyncProperties extends Command
     {
         // Lista fija de providers que quieres sincronizar si no se pasa --provider
         $defaultProviders = [
-            
             'babylon_holiday',
             'barcelo',
             'cn_travel',
@@ -98,17 +97,11 @@ class GiataSyncProperties extends Command
             ->retry(3, 1500, throw: false)
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]]);
 
-        // Cache de providers (provider_code => GiataProvider)
-        $providersCache = [];
-        $getProviderByCode = function (string $code) use (&$providersCache) {
-            $key = strtolower($code);
-            if (isset($providersCache[$key])) {
-                return $providersCache[$key];
-            }
-            $row = GiataProvider::whereRaw('LOWER(provider_code)=?', [$key])->first();
-            $providersCache[$key] = $row; // puede ser null si no existe
-            return $row;
-        };
+        // 🔥 PERF: Mapa rápido provider_code -> provider_id (evita queries dentro del loop)
+        $providersByCode = GiataProvider::select('id', 'provider_code')
+            ->get()
+            ->mapWithKeys(fn($p) => [strtolower($p->provider_code) => (int)$p->id])
+            ->all();
 
         // Determinar qué providers base vamos a procesar
         $providerOpt = $this->option('provider');
@@ -141,9 +134,10 @@ class GiataSyncProperties extends Command
             $providerRow = GiataProvider::whereRaw('LOWER(provider_code)=?', [$baseProviderCode])->first();
             if (!$providerRow) {
                 $this->error("No existe provider base '{$baseProviderCode}' en giata_providers.");
-                // Si quieres continuar con los demás, cambia "return" por "continue"
                 return self::FAILURE;
             }
+
+            $baseProviderId = $providersByCode[strtolower($baseProviderCode)] ?? null;
 
             $baseUrl = $providerRow->properties_href
                 ?: "https://multicodes.giatamedia.com/webservice/rest/1.0/properties/gds/{$baseProviderCode}";
@@ -160,6 +154,27 @@ class GiataSyncProperties extends Command
             $totalCodes   = 0;
             $visited      = 0;
 
+            // 🔥 PERF: si estamos guardando SOLO codes del provider base (ej: --providers=allbeds),
+            // cargamos los giataIds ya procesados y los saltamos (resume).
+            $skipGiataIds = [];
+            if ($saveCodes && $baseProviderId && is_array($providersWanted) && count($providersWanted) === 1) {
+                $only = strtolower($providersWanted[0]);
+                if ($only === strtolower($baseProviderCode)) {
+                    $this->info("Cargando giataIds ya procesados para '{$baseProviderCode}' (resume)...");
+                    DB::table('giata_property_codes as gpc')
+                        ->join('giata_properties as gp', 'gp.id', '=', 'gpc.giata_property_id')
+                        ->where('gpc.provider_id', $baseProviderId)
+                        ->select('gp.giata_id')
+                        ->orderBy('gp.giata_id')
+                        ->chunk(5000, function ($rows) use (&$skipGiataIds) {
+                            foreach ($rows as $r) {
+                                $skipGiataIds[(int)$r->giata_id] = true;
+                            }
+                        });
+                    $this->info("Resume: cargados " . count($skipGiataIds) . " giataIds ya procesados.");
+                }
+            }
+
             // Helpers XML específicos para ESTE provider base
             $baseFilter = strtolower($baseProviderCode);
 
@@ -171,6 +186,8 @@ class GiataSyncProperties extends Command
                 return !empty($activeCodes);
             };
 
+            // Extrae providers/codes ACTIVOS (filtrando opcionalmente por providersWanted)
+            // 🔥 PERF: NO guardamos add_info (muy caro y no suele aportar valor)
             $extractActiveCodesAllProviders = function (\SimpleXMLElement $property) use ($providersWanted): array {
                 $result = [];
                 $providers = $property->xpath(".//propertyCodes/provider");
@@ -199,23 +216,21 @@ class GiataSyncProperties extends Command
                             continue;
                         }
 
-                        $addInfoNode = $codeNode->addInfo ?? null;
-                        $addInfo = null;
-                        if ($addInfoNode) {
-                            $addInfo = json_encode(self::simpleXmlToArrayStatic($addInfoNode), JSON_UNESCAPED_UNICODE);
-                        }
-
                         $result[] = [
                             'provider_code' => $provCode,
                             'code_value'    => $value,
                             'status'        => 'active',
-                            'add_info'      => $addInfo,
+                            'add_info'      => null, // PERF: no almacenar
                         ];
                     }
                 }
 
                 return $result;
             };
+
+            // 🔥 PERF: UPSERT por lotes
+            $codesBatch = [];
+            $codesBatchSize = 2000;
 
             // Paginación para ESTE provider base
             $current = $url;
@@ -249,6 +264,12 @@ class GiataSyncProperties extends Command
                             continue;
                         }
 
+                        // ✅ Resume skip (solo cuando hicimos preload)
+                        if (!empty($skipGiataIds) && isset($skipGiataIds[$giataId])) {
+                            $bar->advance();
+                            continue;
+                        }
+
                         $shouldUpsert = true;
                         $detailXml = null;
 
@@ -267,6 +288,7 @@ class GiataSyncProperties extends Command
                                     }
                                 }
                             }
+
                             if ($d->ok()) {
                                 $parsed = @simplexml_load_string($d->body());
                                 if ($parsed && isset($parsed->property)) {
@@ -294,11 +316,15 @@ class GiataSyncProperties extends Command
                                 try {
                                     $attrs['last_update'] = Carbon::parse($lastUpd);
                                 } catch (\Throwable $e) {
+                                    // ignore
                                 }
                             }
+
+                            // Upsert property
                             $propRow = GiataProperty::updateOrCreate(['giata_id' => $giataId], $attrs);
                             $totalUpserts++;
 
+                            // Enrich basics (si lo pides)
                             if ($doEnrich) {
                                 if (!$detailXml) {
                                     $detailUrl = str_replace('/1.0/', '/1.latest/', $base . '/properties/' . $giataId);
@@ -320,22 +346,21 @@ class GiataSyncProperties extends Command
                                         usleep($sleepMs * 1000);
                                     }
                                 }
+
                                 if ($detailXml && isset($detailXml->property)) {
                                     $name  = isset($detailXml->property->name) ? (string)$detailXml->property->name : null;
                                     $ctry  = isset($detailXml->property->country) ? strtoupper((string)$detailXml->property->country) : null;
                                     $basic = [];
-                                    if ($name) {
-                                        $basic['name'] = $name;
-                                    }
-                                    if ($ctry) {
-                                        $basic['country'] = $ctry;
-                                    }
+                                    if ($name) $basic['name'] = $name;
+                                    if ($ctry) $basic['country'] = $ctry;
+
                                     if ($basic) {
                                         GiataProperty::where('giata_id', $giataId)->update($basic);
                                     }
                                 }
                             }
 
+                            // Save codes (si lo pides)
                             if ($saveCodes) {
                                 if (!$detailXml) {
                                     $detailUrl = str_replace('/1.0/', '/1.latest/', $base . '/properties/' . $giataId);
@@ -351,13 +376,12 @@ class GiataSyncProperties extends Command
                                 if ($detailXml && isset($detailXml->property)) {
                                     $allCodes = $extractActiveCodesAllProviders($detailXml->property);
 
+                                    // Refresh: borrar codes previos SOLO de providers presentes en este payload (si se activa)
                                     if ($refreshCodes && !empty($allCodes)) {
                                         $providerIdsToClear = [];
                                         foreach ($allCodes as $row) {
-                                            $provRow = $getProviderByCode($row['provider_code']);
-                                            if ($provRow) {
-                                                $providerIdsToClear[$provRow->id] = true;
-                                            }
+                                            $pid = $providersByCode[strtolower($row['provider_code'])] ?? null;
+                                            if ($pid) $providerIdsToClear[$pid] = true;
                                         }
                                         if (!empty($providerIdsToClear)) {
                                             GiataPropertyCode::where('giata_property_id', $propRow->id)
@@ -368,32 +392,40 @@ class GiataSyncProperties extends Command
 
                                     if (!empty($allCodes)) {
                                         $now = now();
-                                        $payload = [];
                                         foreach ($allCodes as $c) {
-                                            $provRow = $getProviderByCode($c['provider_code']);
-                                            if (!$provRow) {
+                                            $provCode = strtolower($c['provider_code']);
+                                            $provId = $providersByCode[$provCode] ?? null;
+
+                                            if (!$provId) {
                                                 $this->output->writeln("\n[WARN] Provider '{$c['provider_code']}' no existe en giata_providers. Se omite su code '{$c['code_value']}'.");
                                                 continue;
                                             }
-                                            $payload[] = [
+
+                                            $codesBatch[] = [
                                                 'giata_property_id' => $propRow->id,
-                                                'provider_id'       => $provRow->id,
+                                                'provider_id'       => $provId,
                                                 'code_value'        => $c['code_value'],
                                                 'status'            => $c['status'] ?? 'active',
                                                 'add_info'          => $c['add_info'] ?? null,
                                                 'created_at'        => $now,
                                                 'updated_at'        => $now,
                                             ];
-                                        }
 
-                                        if (!empty($payload)) {
-                                            DB::table('giata_property_codes')->upsert(
-                                                $payload,
-                                                ['giata_property_id', 'provider_id', 'code_value'],
-                                                ['status', 'add_info', 'updated_at']
-                                            );
-                                            $totalCodes += count($payload);
+                                            if (count($codesBatch) >= $codesBatchSize) {
+                                                DB::table('giata_property_codes')->upsert(
+                                                    $codesBatch,
+                                                    ['giata_property_id', 'provider_id', 'code_value'],
+                                                    ['status', 'add_info', 'updated_at']
+                                                );
+                                                $totalCodes += count($codesBatch);
+                                                $codesBatch = [];
+                                            }
                                         }
+                                    }
+
+                                    // ✅ Marcar este giataId como hecho para no repetir dentro del mismo run
+                                    if (!empty($skipGiataIds)) {
+                                        $skipGiataIds[$giataId] = true;
                                     }
                                 }
                             }
@@ -403,6 +435,7 @@ class GiataSyncProperties extends Command
                     }
                 }
 
+                // Paginación
                 $next = null;
                 $more = $xml->xpath('//more');
                 if ($more && isset($more[0])) {
@@ -412,6 +445,17 @@ class GiataSyncProperties extends Command
                     }
                 }
                 $current = $next;
+            }
+
+            // 🔥 PERF: flush final del batch
+            if (!empty($codesBatch)) {
+                DB::table('giata_property_codes')->upsert(
+                    $codesBatch,
+                    ['giata_property_id', 'provider_id', 'code_value'],
+                    ['status', 'add_info', 'updated_at']
+                );
+                $totalCodes += count($codesBatch);
+                $codesBatch = [];
             }
 
             $bar->finish();

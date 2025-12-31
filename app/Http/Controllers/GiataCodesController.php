@@ -101,11 +101,15 @@ class GiataCodesController extends Controller
             // -----------------------------
             if (!$wantsJson) {
                 // tu vista: asegúrate de pasar $giataIdsString si lo necesitas
-                $giataIdsString = implode(', ', $giataIds);
+                $giataIdsString = session()->pull('giata_ids_string', ''); // lee y BORRA
 
-                return view('giata.codes', [
-                    'giataIdsString' => $giataIdsString,
-                ]);
+                return response()
+                    ->view('giata.codes', [
+                        'giataIdsString' => $giataIdsString,
+                    ])
+                    ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                    ->header('Pragma', 'no-cache')
+                    ->header('Expires', '0');
             }
 
             // -----------------------------
@@ -128,16 +132,20 @@ class GiataCodesController extends Controller
                 ];
             })->values();
 
-            return response()->json([
-                'providers' => $providers,
-                'data'      => $rows,
-                'meta'      => [
-                    'current_page' => $pageObj->currentPage(),
-                    'per_page'     => $pageObj->perPage(),
-                    'total'        => $pageObj->total(),
-                    'last_page'    => $pageObj->lastPage(),
-                ],
-            ]);
+            return response()
+                ->json([
+                    'providers' => $providers,
+                    'data'      => $rows,
+                    'meta'      => [
+                        'current_page' => $pageObj->currentPage(),
+                        'per_page'     => $pageObj->perPage(),
+                        'total'        => $pageObj->total(),
+                        'last_page'    => $pageObj->lastPage(),
+                    ],
+                ])
+                ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                ->header('Pragma', 'no-cache')
+                ->header('Expires', '0');
         } catch (\Throwable $e) {
             Log::error('GIATA codes index error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
@@ -278,41 +286,26 @@ class GiataCodesController extends Controller
     {
         // Vista que consume el JSON de /giata/codes + lista de GIATA cargada desde Excel
         $giataIdsString = session('giata_ids_string', '');
-
-        return view('giata.codes', [
-            'giataIdsString' => $giataIdsString,
-        ]);
+        return view('giata.codes', compact('giataIdsString'));
     }
 
     public function hotelSuggest(Request $request)
     {
         $term = trim((string)$request->query('q', ''));
+        if (mb_strlen($term) < 2) return response()->json([]);
 
-        if (strlen($term) < 2) {
-            return response()->json([]);
-        }
-
-        // 1) Buscar hoteles locales
-        $rows = \DB::table('hotels')
-            ->select('name', 'codser')
+        $rows = \DB::table('giata_properties')
+            ->select('name', 'giata_id')
             ->where('name', 'like', "%{$term}%")
             ->orderBy('name')
             ->limit(25)
             ->get();
 
-        // 2) Agregar GIATA a cada hotel usando giata_properties
-        $mapped = $rows->map(function ($h) {
-            $giata = \DB::table('giata_properties')
-                ->where('name', $h->name)       // EXACT MATCH (puede mejorarse si quieres)
-                ->value('giata_id');
-
-            return [
-                'name'     => $h->name,
-                'codser'   => $h->codser,
-                'giata_id' => $giata ?? null,   // Si no lo encuentra, null
-            ];
-        });
-
-        return response()->json($mapped);
+        return response()->json(
+            $rows->map(fn($r) => [
+                'name' => $r->name,
+                'giata_id' => (int) $r->giata_id,
+            ])
+        );
     }
 }
