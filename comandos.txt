@@ -2,8 +2,8 @@ $defaultProviders = [
             'abbey_lc', --> hecho
             'abbey_tp', --> hecho
             'allbeds', --> hecho
-            'alturadestinationservices',
-            'ask2travel',
+            'alturadestinationservices',--> hecho
+            'ask2travel', --> hecho
             'babylon_holiday',
             'barcelo',
             'cn_travel',
@@ -34,6 +34,7 @@ $defaultProviders = [
             'wl2t',
             'yalago',
             'travco',
+            abreu_master_codes
         ];
 ----------------------------------------------------------------------------
 SABER CUANTOS DUPLICADOS HAY

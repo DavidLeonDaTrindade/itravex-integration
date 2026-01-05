@@ -357,12 +357,13 @@
         btn.textContent = `+${codes.length - 1}`;
 
         const menu = document.createElement('div');
-        menu.className = 'hidden mt-1 absolute z-20 rounded-md border border-slate-200 bg-white shadow-sm';
-        menu.style.minWidth = '14rem';
+        menu.className = 'hidden mt-2 rounded-md border border-slate-200 bg-slate-50';
+        menu.style.maxWidth = '18rem';
         menu.setAttribute('data-gcodes-menu', '1');
 
+
         const ul = document.createElement('ul');
-        ul.className = 'max-h-56 overflow-auto text-sm';
+        ul.className = 'max-h-40 overflow-auto text-sm';
         codes.slice(1).forEach(code => {
           const li = document.createElement('li');
           li.className = 'px-3 py-2 hover:bg-slate-50';
@@ -372,9 +373,12 @@
         menu.appendChild(ul);
 
         const wrap = document.createElement('div');
-        wrap.className = 'relative inline-block align-top';
+        wrap.className = 'inline-block align-top'; // ya no hace falta relative
+        const topRow = document.createElement('div');
+        topRow.className = 'inline-flex items-center';
         wrap.appendChild(main);
         wrap.appendChild(btn);
+        wrap.appendChild(topRow);
         wrap.appendChild(menu);
 
         btn.addEventListener('click', (e) => {
