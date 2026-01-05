@@ -1,13 +1,14 @@
 {{-- Compat: permite usar este layout con @extends/@section o con <x-app-layout> --}}
 @php
 if (!isset($slot)) {
-  $__env->startSection('content'); $__env->stopSection();
-  $slot = $__env->yieldContent('content');
+$__env->startSection('content'); $__env->stopSection();
+$slot = $__env->yieldContent('content');
 }
 @endphp
 
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,20 +23,26 @@ if (!isset($slot)) {
 <body class="font-sans antialiased min-h-screen">
   <div class="min-h-screen flex flex-col bg-slate-50">
 
-  {{-- HEADER BAND --}}
-  <div class="bg-slate-100 border-b border-slate-200">
-    @include('layouts.navigation')
+    {{-- HEADER BAND --}}
+    <div class="bg-slate-100 border-b border-slate-200">
+      @if(!View::hasSection('hide_nav'))
+      @if(view()->exists('navigation-menu'))
+      @include('navigation-menu')
+      @elseif(view()->exists('layouts.navigation'))
+      @include('layouts.navigation')
+      @endif
+      @endif
+
+
+    </div>
+
+    {{-- CONTENIDO --}}
+    <main class="flex-1">
+      {{ $slot }}
+    </main>
+
   </div>
 
-  {{-- CONTENIDO --}}
-  <main class="flex-1">
-    {{ $slot }}
-  </main>
-
-</div>
-
 </body>
+
 </html>
-
-
-
