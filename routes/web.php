@@ -168,6 +168,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/giata/codes/export', [GiataCodesController::class, 'export'])
         ->name('giata.codes.export');
+
+    Route::post('/giata/providers', [GiataProviderController::class, 'sync'])->name('giata.providers.sync');
 });
 
 require __DIR__ . '/auth.php';

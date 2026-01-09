@@ -92,9 +92,9 @@ class GiataSyncProperties extends Command
 
         $http = fn() => Http::withHeaders(['Authorization' => $authHeader])
             ->accept('application/xml')
-            ->timeout(90)
-            ->connectTimeout(10)
-            ->retry(3, 1500, throw: false)
+            ->timeout(180)           // más margen
+            ->connectTimeout(30)     // clave: evita cURL 28 por handshake lento
+            ->retry(3, 2000, throw: false)
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]]);
 
         // 🔥 PERF: Mapa rápido provider_code -> provider_id (evita queries dentro del loop)
@@ -181,7 +181,7 @@ class GiataSyncProperties extends Command
             $providerHasActiveCode = function (\SimpleXMLElement $property) use ($baseFilter): bool {
                 $activeCodes = $property->xpath(
                     ".//propertyCodes/provider[translate(@providerCode,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='{$baseFilter}']" .
-                    "/code[not(@status) or translate(@status,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')!='inactive']"
+                        "/code[not(@status) or translate(@status,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')!='inactive']"
                 );
                 return !empty($activeCodes);
             };
@@ -277,7 +277,12 @@ class GiataSyncProperties extends Command
                         if ($onlyActive || $doEnrich || $saveCodes) {
                             $detailUrl = str_replace('/1.0/', '/1.latest/', $base . '/properties/' . $giataId);
 
-                            $d = $http()->get($detailUrl);
+                            try {
+                                $d = $http()->get($detailUrl);
+                            } catch (\Throwable $e) {
+                                $this->output->writeln("\n[WARN] Detail {$giataId} -> EXCEPTION: {$e->getMessage()}");
+                                $d = null;
+                            }
                             if (!$d->ok() && in_array($d->status(), [301, 302], true)) {
                                 $xml301 = @simplexml_load_string($d->body());
                                 if ($xml301) {
@@ -295,7 +300,7 @@ class GiataSyncProperties extends Command
                                     $detailXml = $parsed;
                                 }
                             } else {
-                                $this->output->writeln("\n[WARN] Detail {$giataId} -> HTTP {$d->status()}");
+                                $this->output->writeln("\n[WARN] Detail {$giataId} -> HTTP " . ($d ? $d->status() : 'NO_RESPONSE'));
                             }
 
                             if ($onlyActive) {
@@ -474,8 +479,8 @@ class GiataSyncProperties extends Command
             if ($saveCodes) {
                 $this->line(
                     'Guardado de codes activo (--save-codes).'
-                    . ($providersWanted ? ' Solo los providers: ' . implode(', ', $providersWanted) : ' Todos los providers.')
-                    . ($refreshCodes ? ' Con limpieza previa (--refresh-codes).' : '')
+                        . ($providersWanted ? ' Solo los providers: ' . implode(', ', $providersWanted) : ' Todos los providers.')
+                        . ($refreshCodes ? ' Con limpieza previa (--refresh-codes).' : '')
                 );
             }
 

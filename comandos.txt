@@ -4,7 +4,7 @@ $defaultProviders = [
             'allbeds', --> hecho
             'alturadestinationservices',--> hecho
             'ask2travel', --> hecho
-            'babylon_holiday',
+            'babylon_holiday',--> hecho
             'barcelo',
             'cn_travel',
             'connectycs',
