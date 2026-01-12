@@ -74,6 +74,14 @@ class GiataCodesController extends Controller
             if (!empty($giataIds)) {
                 $query->whereIn('giata_id', $giataIds);
             }
+            // -----------------------------
+            // 3.5) Si hay providers seleccionados, exigir codes activos (filtra automáticamente)
+            // -----------------------------
+            if ($providerFilterIds->isNotEmpty()) {
+                $query->whereHas('codes', function ($qc) use ($providerFilterIds) {
+                    $qc->active()->whereIn('provider_id', $providerFilterIds);
+                });
+            }
 
             // -----------------------------
             // 4) Búsqueda libre
@@ -115,8 +123,10 @@ class GiataCodesController extends Controller
             // -----------------------------
             // 6) JSON: paginar + mapear
             // -----------------------------
-            $pageObj = $query->orderBy('name')->paginate($perPage, ['*'], 'page', $page);
-
+            $pageObj = $query
+                ->orderByRaw("(name IS NULL OR name = '') ASC")
+                ->orderBy('name')
+                ->paginate($perPage, ['*'], 'page', $page);
             $rows = $pageObj->getCollection()->map(function ($prop) {
                 $map = [];
                 foreach ($prop->codes as $c) {
@@ -206,6 +216,13 @@ class GiataCodesController extends Controller
         if (!empty($giataIds)) {
             $query->whereIn('giata_id', $giataIds);
         }
+        // Si hay providers seleccionados, exporta SOLO hoteles con codes activos de esos providers
+        if ($providerFilterIds->isNotEmpty()) {
+            $query->whereHas('codes', function ($qc) use ($providerFilterIds) {
+                $qc->active()->whereIn('provider_id', $providerFilterIds);
+            });
+        }
+
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -259,15 +276,23 @@ class GiataCodesController extends Controller
 
             if ($exportAll) {
                 // ✅ Exportar TODO (sin paginación) en chunks para no petar memoria
-                $query->orderBy('name')->chunk(300, function ($chunk) use ($writeProp, $out) {
-                    foreach ($chunk as $prop) {
-                        $writeProp($prop);
-                    }
-                    fflush($out);
-                });
+                $query
+                    ->orderByRaw("(name IS NULL OR name = '') ASC")
+                    ->orderBy('name')
+                    ->chunk(300, function ($chunk) use ($writeProp, $out) {
+
+                        foreach ($chunk as $prop) {
+                            $writeProp($prop);
+                        }
+                        fflush($out);
+                    });
             } else {
                 // Exportar solo la página actual
-                $pageObj = $query->orderBy('name')->paginate($perPage, ['*'], 'page', $page);
+                $pageObj = $query
+                    ->orderByRaw("(name IS NULL OR name = '') ASC")
+                    ->orderBy('name')
+                    ->paginate($perPage, ['*'], 'page', $page);
+
                 foreach ($pageObj->items() as $prop) {
                     $writeProp($prop);
                 }

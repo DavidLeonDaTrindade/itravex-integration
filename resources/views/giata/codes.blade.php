@@ -635,7 +635,8 @@
             const tdHotel = document.createElement('td');
             tdHotel.className = 'sticky left-0 z-10 bg-inherit pb-td align-top';
             tdHotel.innerHTML = `
-          <div class="font-medium">${r.hotel_name ?? '—'}</div>
+          <div class="font-medium">${r.hotel_name ?? r.name ?? r.property_name ?? r.hotel?.name ?? '—'}</div>
+
           <div class="text-xs text-slate-500">GIATA #${r.giata_id}</div>
         `;
             tr.appendChild(tdHotel);
