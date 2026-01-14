@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\GiataProperty;
 use App\Models\GiataProvider;
+use App\Models\GiataPropertyCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -13,7 +14,6 @@ class GiataCodesController extends Controller
 {
     public function index(Request $req)
     {
-        // Si el frontend manda Accept: application/json, esto será true
         $wantsJson = $req->expectsJson() || $req->ajax() || $req->header('Accept') === 'application/json';
 
         try {
@@ -21,9 +21,7 @@ class GiataCodesController extends Controller
             $perPage = max(5, min((int) $req->input('per_page', 25), 200));
             $page    = max(1, (int) $req->input('page', 1));
 
-            // -----------------------------
             // 1) Proveedores seleccionados
-            // -----------------------------
             $providerCodesFilter = (array) $req->input('providers', []);
             if (empty($providerCodesFilter)) {
                 $providerCodesFilter = (array) $req->query('providers', []);
@@ -36,30 +34,24 @@ class GiataCodesController extends Controller
                 $providersQuery->whereIn('provider_code', $providerCodesFilter);
             }
 
-            // incluye 'name' si existe en tu tabla (tu frontend lo intenta usar)
-            $providers = $providersQuery->get(['id', 'provider_code', 'provider_type',]);
+            $providers = $providersQuery->get(['id', 'provider_code', 'provider_type']);
 
             $providerFilterIds = !empty($providerCodesFilter)
                 ? $providers->pluck('id')
                 : collect();
 
-            // -----------------------------
-            // 2) Filtro GIATA IDs (MUY IMPORTANTE)
-            // -----------------------------
+            // 2) Filtro GIATA IDs
             $giataIds = (array) $req->input('giata_ids', []);
             if (empty($giataIds)) {
                 $giataIds = (array) $req->query('giata_ids', []);
             }
 
-            // limpiar: solo números
             $giataIds = array_values(array_unique(array_filter($giataIds, function ($v) {
                 $v = trim((string)$v);
                 return $v !== '' && preg_match('/^\d+$/', $v);
             })));
 
-            // -----------------------------
-            // 3) Query base hoteles + codes activos
-            // -----------------------------
+            // 3) Query base + codes activos
             $query = GiataProperty::query()
                 ->with(['codes' => function ($q) use ($providerFilterIds) {
                     $q->active()
@@ -70,22 +62,28 @@ class GiataCodesController extends Controller
                     }
                 }]);
 
-            // aplicar filtro GIATA ids si hay
             if (!empty($giataIds)) {
                 $query->whereIn('giata_id', $giataIds);
             }
-            // -----------------------------
-            // 3.5) Si hay providers seleccionados, exigir codes activos (filtra automáticamente)
-            // -----------------------------
+
+            // 3.5) Reglas de coincidencia:
+            //  - 1 provider => 1 match
+            //  - 2+ providers => mínimo 2 match
             if ($providerFilterIds->isNotEmpty()) {
-                $query->whereHas('codes', function ($qc) use ($providerFilterIds) {
-                    $qc->active()->whereIn('provider_id', $providerFilterIds);
-                });
+                $minMatches = ($providerFilterIds->count() >= 2) ? 2 : 1;
+
+                $ids = GiataPropertyCode::query()
+                    ->active()
+                    ->whereIn('provider_id', $providerFilterIds)
+                    ->select('giata_property_id')
+                    ->groupBy('giata_property_id')
+                    ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minMatches]);
+
+                // ojo: giata_property_id apunta a giata_properties.id (PK)
+                $query->whereIn('id', $ids);
             }
 
-            // -----------------------------
-            // 4) Búsqueda libre
-            // -----------------------------
+            // 4) búsqueda libre
             if ($search !== '') {
                 $query->where(function ($q) use ($search) {
                     if (ctype_digit($search)) {
@@ -104,12 +102,9 @@ class GiataCodesController extends Controller
                 });
             }
 
-            // -----------------------------
-            // 5) Si NO quiere JSON, devolvemos vista
-            // -----------------------------
+            // 5) vista
             if (!$wantsJson) {
-                // tu vista: asegúrate de pasar $giataIdsString si lo necesitas
-                $giataIdsString = session()->pull('giata_ids_string', ''); // lee y BORRA
+                $giataIdsString = session()->pull('giata_ids_string', '');
 
                 return response()
                     ->view('giata.codes', [
@@ -120,13 +115,12 @@ class GiataCodesController extends Controller
                     ->header('Expires', '0');
             }
 
-            // -----------------------------
-            // 6) JSON: paginar + mapear
-            // -----------------------------
+            // 6) JSON
             $pageObj = $query
                 ->orderByRaw("(name IS NULL OR name = '') ASC")
                 ->orderBy('name')
                 ->paginate($perPage, ['*'], 'page', $page);
+
             $rows = $pageObj->getCollection()->map(function ($prop) {
                 $map = [];
                 foreach ($prop->codes as $c) {
@@ -156,12 +150,12 @@ class GiataCodesController extends Controller
                 ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
                 ->header('Pragma', 'no-cache')
                 ->header('Expires', '0');
+
         } catch (\Throwable $e) {
             Log::error('GIATA codes index error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // si el frontend esperaba JSON, devolvemos JSON (no HTML)
             if ($wantsJson) {
                 return response()->json([
                     'message' => 'Error interno al cargar GIATA codes.',
@@ -177,25 +171,20 @@ class GiataCodesController extends Controller
     {
         $search = trim((string) $req->input('q', ''));
 
-        // ✅ flag para exportar TODO
         $exportAll = (bool) $req->input('export_all', false);
 
-        // Si NO exportAll, respeta paginación
         $perPage = max(5, min((int) $req->input('per_page', 25), 200));
         $page    = max(1, (int) $req->input('page', 1));
 
-        // providers[] (provider_code)
         $providerCodesFilter = (array) $req->input('providers', []);
         $providerCodesFilter = array_values(array_filter($providerCodesFilter, fn($v) => trim((string)$v) !== ''));
 
-        // giata_ids[]
         $giataIds = (array) $req->input('giata_ids', []);
         $giataIds = array_values(array_unique(array_filter($giataIds, function ($v) {
             $v = trim((string)$v);
             return $v !== '' && preg_match('/^\d+$/', $v);
         })));
 
-        // Providers (columnas)
         $providersQuery = GiataProvider::query()->orderBy('provider_code');
         if (!empty($providerCodesFilter)) {
             $providersQuery->whereIn('provider_code', $providerCodesFilter);
@@ -204,7 +193,6 @@ class GiataCodesController extends Controller
 
         $providerFilterIds = !empty($providerCodesFilter) ? $providers->pluck('id') : collect();
 
-        // Query base igual que index()
         $query = GiataProperty::query()
             ->with(['codes' => function ($q) use ($providerFilterIds) {
                 $q->active()->with('provider:id,provider_code,provider_type');
@@ -216,13 +204,19 @@ class GiataCodesController extends Controller
         if (!empty($giataIds)) {
             $query->whereIn('giata_id', $giataIds);
         }
-        // Si hay providers seleccionados, exporta SOLO hoteles con codes activos de esos providers
-        if ($providerFilterIds->isNotEmpty()) {
-            $query->whereHas('codes', function ($qc) use ($providerFilterIds) {
-                $qc->active()->whereIn('provider_id', $providerFilterIds);
-            });
-        }
 
+        if ($providerFilterIds->isNotEmpty()) {
+            $minMatches = ($providerFilterIds->count() >= 2) ? 2 : 1;
+
+            $ids = GiataPropertyCode::query()
+                ->active()
+                ->whereIn('provider_id', $providerFilterIds)
+                ->select('giata_property_id')
+                ->groupBy('giata_property_id')
+                ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minMatches]);
+
+            $query->whereIn('id', $ids);
+        }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -246,15 +240,11 @@ class GiataCodesController extends Controller
 
         return response()->streamDownload(function () use ($providers, $query, $exportAll, $perPage, $page) {
             $out = fopen('php://output', 'w');
-
-            // BOM UTF-8 para Excel
             fwrite($out, "\xEF\xBB\xBF");
 
-            // header
             $header = array_merge(['Hotel', 'GIATA ID'], $providers->pluck('provider_code')->all());
             fputcsv($out, $header, ';');
 
-            // Helper para escribir una fila
             $writeProp = function ($prop) use ($out, $providers) {
                 $map = [];
                 foreach ($prop->codes as $c) {
@@ -275,27 +265,20 @@ class GiataCodesController extends Controller
             };
 
             if ($exportAll) {
-                // ✅ Exportar TODO (sin paginación) en chunks para no petar memoria
                 $query
                     ->orderByRaw("(name IS NULL OR name = '') ASC")
                     ->orderBy('name')
                     ->chunk(300, function ($chunk) use ($writeProp, $out) {
-
-                        foreach ($chunk as $prop) {
-                            $writeProp($prop);
-                        }
+                        foreach ($chunk as $prop) $writeProp($prop);
                         fflush($out);
                     });
             } else {
-                // Exportar solo la página actual
                 $pageObj = $query
                     ->orderByRaw("(name IS NULL OR name = '') ASC")
                     ->orderBy('name')
                     ->paginate($perPage, ['*'], 'page', $page);
 
-                foreach ($pageObj->items() as $prop) {
-                    $writeProp($prop);
-                }
+                foreach ($pageObj->items() as $prop) $writeProp($prop);
             }
 
             fclose($out);
@@ -305,11 +288,8 @@ class GiataCodesController extends Controller
         ]);
     }
 
-
-
     public function browser()
     {
-        // Vista que consume el JSON de /giata/codes + lista de GIATA cargada desde Excel
         $giataIdsString = session('giata_ids_string', '');
         return view('giata.codes', compact('giataIdsString'));
     }

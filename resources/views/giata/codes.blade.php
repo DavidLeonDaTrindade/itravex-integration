@@ -373,8 +373,9 @@
               <div id="provSelected" class="text-xs text-slate-600"></div>
             </div>
 
-            <div class="text-xs text-slate-500">
-              Selecciona hasta 10 <code>provider_code</code>.<br>
+            <div class="text-xs text-slate-500 md:ml-auto md:text-right leading-tight">
+              Selecciona hasta 10 <code>provider_code</code>.
+              <span class="hidden md:inline"><br></span>
               Si lo dejas vacío, se mostrarán solo proveedores con datos en la página
               (itravex primero si aplica).
             </div>
