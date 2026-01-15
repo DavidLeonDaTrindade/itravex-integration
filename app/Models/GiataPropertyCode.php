@@ -15,7 +15,7 @@ class GiataPropertyCode extends Model
         'giata_property_id',
         'provider_id',
         'code_value',
-        'status',    // 'active' | 'inactive' | null
+        'status',    // 'active' | 'inactive'
         'add_info',  // JSON
     ];
 
@@ -35,15 +35,22 @@ class GiataPropertyCode extends Model
     }
 
     // ── Scopes ────────────────────────────────────────────────────
+
+    /**
+     * SOLO códigos activos reales
+     */
     public function scopeActive($q)
     {
-        return $q->where(function ($w) {
-            $w->whereNull('status')->orWhere('status', 'active');
-        });
+        return $q->where('status', 'active');
     }
 
+    /**
+     * Filtrar por provider_code
+     */
     public function scopeForProvider($q, string $providerCode)
     {
-        return $q->whereHas('provider', fn($p) => $p->where('provider_code', $providerCode));
+        return $q->whereHas('provider', function ($p) use ($providerCode) {
+            $p->where('provider_code', $providerCode);
+        });
     }
 }
