@@ -4,14 +4,29 @@ namespace App\Http\Controllers;
 
 use App\Models\GiataProperty;
 use App\Models\GiataProvider;
-use App\Models\GiataPropertyCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 
 class GiataCodesController extends Controller
 {
+    private function applyActiveFilter($q)
+    {
+        // Detecta columna “activo” disponible (si existe)
+        // Ajusta aquí si tu esquema usa otro nombre.
+        if (Schema::hasColumn('giata_property_codes', 'is_active')) {
+            $q->where('is_active', 1);
+        } elseif (Schema::hasColumn('giata_property_codes', 'active')) {
+            $q->where('active', 1);
+        } elseif (Schema::hasColumn('giata_property_codes', 'status')) {
+            $q->where('status', 'ACTIVE');
+        }
+        // Si no existe ninguna, no filtramos por activo (para no romper prod).
+        return $q;
+    }
+
     public function index(Request $req)
     {
         $wantsJson = $req->expectsJson() || $req->ajax() || $req->header('Accept') === 'application/json';
@@ -21,7 +36,9 @@ class GiataCodesController extends Controller
             $perPage = max(5, min((int) $req->input('per_page', 25), 200));
             $page    = max(1, (int) $req->input('page', 1));
 
+            // -----------------------------
             // 1) Proveedores seleccionados
+            // -----------------------------
             $providerCodesFilter = (array) $req->input('providers', []);
             if (empty($providerCodesFilter)) {
                 $providerCodesFilter = (array) $req->query('providers', []);
@@ -29,7 +46,6 @@ class GiataCodesController extends Controller
             $providerCodesFilter = array_values(array_filter($providerCodesFilter, fn($v) => trim((string)$v) !== ''));
 
             $providersQuery = GiataProvider::query()->orderBy('provider_code');
-
             if (!empty($providerCodesFilter)) {
                 $providersQuery->whereIn('provider_code', $providerCodesFilter);
             }
@@ -37,26 +53,32 @@ class GiataCodesController extends Controller
             $providers = $providersQuery->get(['id', 'provider_code', 'provider_type']);
 
             $providerFilterIds = !empty($providerCodesFilter)
-                ? $providers->pluck('id')
+                ? $providers->pluck('id')->values()
                 : collect();
 
+            // -----------------------------
             // 2) Filtro GIATA IDs
+            // -----------------------------
             $giataIds = (array) $req->input('giata_ids', []);
             if (empty($giataIds)) {
                 $giataIds = (array) $req->query('giata_ids', []);
             }
-
             $giataIds = array_values(array_unique(array_filter($giataIds, function ($v) {
                 $v = trim((string)$v);
                 return $v !== '' && preg_match('/^\d+$/', $v);
             })));
 
-            // 3) Query base + codes activos
+            // -----------------------------
+            // 3) Query base (propiedades)
+            // -----------------------------
             $query = GiataProperty::query()
                 ->with(['codes' => function ($q) use ($providerFilterIds) {
-                    $q->active()
-                        ->with('provider:id,provider_code,provider_type');
+                    // solo codes “activos” si hay columna compatible
+                    $this->applyActiveFilter($q);
 
+                    $q->with('provider:id,provider_code,provider_type');
+
+                    // si hay providers seleccionados, filtramos los codes a esos providers
                     if ($providerFilterIds->isNotEmpty()) {
                         $q->whereIn('provider_id', $providerFilterIds);
                     }
@@ -66,24 +88,39 @@ class GiataCodesController extends Controller
                 $query->whereIn('giata_id', $giataIds);
             }
 
-            // 3.5) Reglas de coincidencia:
-            //  - 1 provider => 1 match
-            //  - 2+ providers => mínimo 2 match
-            if ($providerFilterIds->isNotEmpty()) {
-                $minMatches = ($providerFilterIds->count() >= 2) ? 2 : 1;
+            // -----------------------------
+            // 3.5) REGla nueva:
+            // Si seleccionas >= 2 providers,
+            // mostrar SOLO hoteles que tengan codes en MIN 2 providers seleccionados.
+            // -----------------------------
+            if ($providerFilterIds->count() >= 2) {
+                $minProviders = 2; // <- si quieres que sea “todos”, cambia a $providerFilterIds->count()
 
-                $ids = GiataPropertyCode::query()
-                    ->active()
-                    ->whereIn('provider_id', $providerFilterIds)
-                    ->select('giata_property_id')
-                    ->groupBy('giata_property_id')
-                    ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minMatches]);
+                $query->whereIn('id', function ($sub) use ($providerFilterIds, $minProviders) {
+                    $sub->from('giata_property_codes')
+                        ->select('giata_property_id')
+                        ->whereIn('provider_id', $providerFilterIds);
 
-                // ojo: giata_property_id apunta a giata_properties.id (PK)
-                $query->whereIn('id', $ids);
+                    // filtro activo compatible
+                    $this->applyActiveFilter($sub);
+
+                    $sub->groupBy('giata_property_id')
+                        ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minProviders]);
+                });
+            } elseif ($providerFilterIds->count() === 1) {
+                // Si solo hay 1 provider seleccionado: que existan codes para ese provider
+                $pid = $providerFilterIds->first();
+                $query->whereIn('id', function ($sub) use ($pid) {
+                    $sub->from('giata_property_codes')
+                        ->select('giata_property_id')
+                        ->where('provider_id', $pid);
+                    $this->applyActiveFilter($sub);
+                });
             }
 
-            // 4) búsqueda libre
+            // -----------------------------
+            // 4) Búsqueda libre
+            // -----------------------------
             if ($search !== '') {
                 $query->where(function ($q) use ($search) {
                     if (ctype_digit($search)) {
@@ -102,20 +139,22 @@ class GiataCodesController extends Controller
                 });
             }
 
-            // 5) vista
+            // -----------------------------
+            // 5) HTML
+            // -----------------------------
             if (!$wantsJson) {
                 $giataIdsString = session()->pull('giata_ids_string', '');
-
                 return response()
-                    ->view('giata.codes', [
-                        'giataIdsString' => $giataIdsString,
-                    ])
+                    ->view('giata.codes', ['giataIdsString' => $giataIdsString])
                     ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
                     ->header('Pragma', 'no-cache')
                     ->header('Expires', '0');
             }
 
+            // -----------------------------
             // 6) JSON
+            // Orden: los sin nombre al final
+            // -----------------------------
             $pageObj = $query
                 ->orderByRaw("(name IS NULL OR name = '') ASC")
                 ->orderBy('name')
@@ -169,8 +208,9 @@ class GiataCodesController extends Controller
 
     public function export(Request $req): StreamedResponse
     {
+        // (Si quieres, te lo adapto también con la misma regla de “min 2 providers”
+        // para que el export coincida EXACTO con la tabla.)
         $search = trim((string) $req->input('q', ''));
-
         $exportAll = (bool) $req->input('export_all', false);
 
         $perPage = max(5, min((int) $req->input('per_page', 25), 200));
@@ -190,12 +230,13 @@ class GiataCodesController extends Controller
             $providersQuery->whereIn('provider_code', $providerCodesFilter);
         }
         $providers = $providersQuery->get(['id', 'provider_code', 'provider_type']);
-
-        $providerFilterIds = !empty($providerCodesFilter) ? $providers->pluck('id') : collect();
+        $providerFilterIds = !empty($providerCodesFilter) ? $providers->pluck('id')->values() : collect();
 
         $query = GiataProperty::query()
             ->with(['codes' => function ($q) use ($providerFilterIds) {
-                $q->active()->with('provider:id,provider_code,provider_type');
+                $this->applyActiveFilter($q);
+                $q->with('provider:id,provider_code,provider_type');
+
                 if ($providerFilterIds->isNotEmpty()) {
                     $q->whereIn('provider_id', $providerFilterIds);
                 }
@@ -205,17 +246,28 @@ class GiataCodesController extends Controller
             $query->whereIn('giata_id', $giataIds);
         }
 
-        if ($providerFilterIds->isNotEmpty()) {
-            $minMatches = ($providerFilterIds->count() >= 2) ? 2 : 1;
+        // Misma regla min 2 providers para export
+        if ($providerFilterIds->count() >= 2) {
+            $minProviders = 2;
 
-            $ids = GiataPropertyCode::query()
-                ->active()
-                ->whereIn('provider_id', $providerFilterIds)
-                ->select('giata_property_id')
-                ->groupBy('giata_property_id')
-                ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minMatches]);
+            $query->whereIn('id', function ($sub) use ($providerFilterIds, $minProviders) {
+                $sub->from('giata_property_codes')
+                    ->select('giata_property_id')
+                    ->whereIn('provider_id', $providerFilterIds);
 
-            $query->whereIn('id', $ids);
+                $this->applyActiveFilter($sub);
+
+                $sub->groupBy('giata_property_id')
+                    ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minProviders]);
+            });
+        } elseif ($providerFilterIds->count() === 1) {
+            $pid = $providerFilterIds->first();
+            $query->whereIn('id', function ($sub) use ($pid) {
+                $sub->from('giata_property_codes')
+                    ->select('giata_property_id')
+                    ->where('provider_id', $pid);
+                $this->applyActiveFilter($sub);
+            });
         }
 
         if ($search !== '') {
@@ -234,9 +286,7 @@ class GiataCodesController extends Controller
         }
 
         $safeQ = $search !== '' ? Str::slug(Str::limit($search, 40, ''), '_') : 'all';
-        $filename = $exportAll
-            ? "giata_codes_{$safeQ}_ALL.csv"
-            : "giata_codes_{$safeQ}_page_{$page}.csv";
+        $filename = $exportAll ? "giata_codes_{$safeQ}_ALL.csv" : "giata_codes_{$safeQ}_page_{$page}.csv";
 
         return response()->streamDownload(function () use ($providers, $query, $exportAll, $perPage, $page) {
             $out = fopen('php://output', 'w');
@@ -254,7 +304,6 @@ class GiataCodesController extends Controller
                 }
 
                 $line = [$prop->name ?? '', (string)$prop->giata_id];
-
                 foreach ($providers as $p) {
                     $val = $map[$p->id] ?? '';
                     $val = preg_replace('/\s+/', ' ', (string)$val);
