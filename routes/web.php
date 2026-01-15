@@ -45,6 +45,18 @@ Route::middleware(['auth'])->group(function () {
             'database_name'      => DB::connection()->getConfig('database'),
         ]);
     });
+    Route::get('/_build', function () {
+        return response()->json([
+            'base_path'   => base_path(),
+            'git_head'    => trim(@shell_exec('git rev-parse --short HEAD')),
+            'git_branch'  => trim(@shell_exec('git rev-parse --abbrev-ref HEAD')),
+            'env'         => app()->environment(),
+            'db_default'  => DB::getDefaultConnection(),
+            'db_config'   => config('database.default'),
+            'database'    => DB::connection()->getDatabaseName(),
+        ]);
+    })->name('debug.build');
+
 
 
     // ---- Ruta para cambiar de base de datos ----
