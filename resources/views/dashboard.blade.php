@@ -94,7 +94,7 @@ $arrow = '
                     {{ $db==='mysql'
                       ? 'bg-blue-600 text-white'
                       : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
-                  🗄️ itravex
+                  🗄️ itravex: Inventario Web
                 </button>
 
                 <button type="submit"
@@ -103,7 +103,7 @@ $arrow = '
                     {{ $db==='mysql_cli2'
                       ? 'bg-green-600 text-white'
                       : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100' }}">
-                  🗄️ itravex_cliente2
+                  🗄️ itravex_cliente2: Portafolio API
                 </button>
               </form>
 
