@@ -522,6 +522,8 @@
 
         let lastRows = [];
         let selectedCodes = [];
+        let pageAbortController = null;
+        let isFetchingPage = false;
 
         // loading fake bar
         let loadingInterval = null;
@@ -866,10 +868,17 @@
           return filtered;
         };
 
-        // ==========================
-        // Fetch main page (GET / POST)
-        // ==========================
         const fetchPage = async () => {
+
+          // 🚫 Cancelar petición anterior si existe
+          if (pageAbortController) {
+            pageAbortController.abort();
+          }
+
+          pageAbortController = new AbortController();
+          const signal = pageAbortController.signal;
+          isFetchingPage = true;
+
           try {
             setLoading();
 
@@ -885,7 +894,7 @@
                 .map(v => v.trim())
                 .filter(v => v !== '' && /^\d+$/.test(v));
             }
-            // no filtres por nombre (para no machacar la lista)
+
             if (lastPickWasSuggestion || giataIds.length) {
               term = '';
               lastPickWasSuggestion = false;
@@ -907,8 +916,10 @@
               res = await fetch(`${apiUrl}?${params.toString()}`, {
                 headers: {
                   'Accept': 'application/json'
-                }
+                },
+                signal
               });
+
             } else {
               const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
 
@@ -927,16 +938,13 @@
                   page: Number(page),
                   giata_ids: giataIds,
                   providers: selectedCodes
-                })
+                }),
+                signal
               });
             }
 
             if (!res.ok) {
               const text = await res.text();
-              if (loadingInterval) {
-                clearInterval(loadingInterval);
-                loadingInterval = null;
-              }
               console.error('Error HTTP', res.status, text);
               rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">Error ${res.status}. Mira consola.</td></tr>`;
               return;
@@ -945,18 +953,17 @@
             const contentType = res.headers.get('content-type') || '';
             if (!contentType.includes('application/json')) {
               const text = await res.text();
-              if (loadingInterval) {
-                clearInterval(loadingInterval);
-                loadingInterval = null;
-              }
               console.error('Respuesta no JSON:', text);
               rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">El servidor devolvió HTML en vez de JSON.</td></tr>`;
               return;
             }
+
             logPerf('HTTP (hasta headers OK)', tReq);
+
             const tJson = perf.now();
             const json = await res.json();
             logPerf('JSON parse', tJson);
+
             const tCompute = perf.now();
 
             await finishLoading();
@@ -969,14 +976,14 @@
             lastRows = json.data || [];
             providers = filterProvidersWithData(lastRows);
             logPerf('compute providers (filterProvidersWithData)', tCompute);
-            const tRender = perf.now();
 
+            const tRender = perf.now();
 
             renderProvidersHeader();
             renderRows(lastRows);
+
             logPerf('render DOM (header+rows)', tRender);
             logPerf('TOTAL fetchPage()', tAll);
-
 
             const m = json.meta || {
               current_page: 1,
@@ -984,6 +991,7 @@
               total: 0,
               per_page: perSel.value
             };
+
             page = m.current_page;
 
             metaEl.textContent = `Página ${m.current_page} de ${m.last_page} · ${m.total} resultados`;
@@ -991,12 +999,17 @@
             nextBtn.disabled = (page >= m.last_page);
 
           } catch (e) {
-            if (loadingInterval) {
-              clearInterval(loadingInterval);
-              loadingInterval = null;
+
+            if (e.name === 'AbortError') {
+              console.log('Petición anterior cancelada 🛑');
+              return;
             }
+
             console.error(e);
             rowsEl.innerHTML = `<tr><td class="p-4 text-red-600" colspan="99">Error de red o parseo JSON.</td></tr>`;
+
+          } finally {
+            isFetchingPage = false;
           }
         };
 
