@@ -994,9 +994,9 @@
 
             page = m.current_page;
 
-            metaEl.textContent = `Página ${m.current_page} de ${m.last_page} · ${m.total} resultados`;
+            metaEl.textContent = `Página ${m.current_page}`;
             prevBtn.disabled = (page <= 1);
-            nextBtn.disabled = (page >= m.last_page);
+            nextBtn.disabled = !m.has_more;
 
           } catch (e) {
 

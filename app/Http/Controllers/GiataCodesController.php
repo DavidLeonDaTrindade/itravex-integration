@@ -12,19 +12,32 @@ use Illuminate\Support\Facades\Schema;
 
 class GiataCodesController extends Controller
 {
+    /**
+     * Cachea la columna “activo” detectada para no pegar a information_schema
+     * en cada request.
+     */
+    private static ?string $activeCol = null; // 'is_active' | 'active' | 'status' | '' (none)
+
     private function applyActiveFilter($q)
     {
-        // Detecta columna “activo” disponible (si existe)
-        // Ajusta aquí si tu esquema usa otro nombre.
-        if (Schema::hasColumn('giata_property_codes', 'is_active')) {
-            $q->where('is_active', 1);
-        } elseif (Schema::hasColumn('giata_property_codes', 'active')) {
-            $q->where('active', 1);
-        } elseif (Schema::hasColumn('giata_property_codes', 'status')) {
-            $q->where('status', 'ACTIVE');
+        if (self::$activeCol === null) {
+            if (Schema::hasColumn('giata_property_codes', 'is_active')) {
+                self::$activeCol = 'is_active';
+            } elseif (Schema::hasColumn('giata_property_codes', 'active')) {
+                self::$activeCol = 'active';
+            } elseif (Schema::hasColumn('giata_property_codes', 'status')) {
+                self::$activeCol = 'status';
+            } else {
+                self::$activeCol = '';
+            }
         }
-        // Si no existe ninguna, no filtramos por activo (para no romper prod).
-        return $q;
+
+        return match (self::$activeCol) {
+            'is_active' => $q->where('is_active', 1),
+            'active'    => $q->where('active', 1),
+            'status'    => $q->where('status', 'ACTIVE'),
+            default     => $q,
+        };
     }
 
     public function index(Request $req)
@@ -89,31 +102,30 @@ class GiataCodesController extends Controller
             }
 
             // -----------------------------
-            // 3.5) REGla nueva:
+            // 3.5) Regla:
             // Si seleccionas >= 2 providers,
             // mostrar SOLO hoteles que tengan codes en MIN 2 providers seleccionados.
             // -----------------------------
             if ($providerFilterIds->count() >= 2) {
-                $minProviders = 2; // <- si quieres que sea “todos”, cambia a $providerFilterIds->count()
+                $minProviders = 2; // si quieres que sea “todos”, cambia a $providerFilterIds->count()
 
                 $query->whereIn('id', function ($sub) use ($providerFilterIds, $minProviders) {
                     $sub->from('giata_property_codes')
                         ->select('giata_property_id')
                         ->whereIn('provider_id', $providerFilterIds);
 
-                    // filtro activo compatible
                     $this->applyActiveFilter($sub);
 
                     $sub->groupBy('giata_property_id')
                         ->havingRaw('COUNT(DISTINCT provider_id) >= ?', [$minProviders]);
                 });
             } elseif ($providerFilterIds->count() === 1) {
-                // Si solo hay 1 provider seleccionado: que existan codes para ese provider
                 $pid = $providerFilterIds->first();
                 $query->whereIn('id', function ($sub) use ($pid) {
                     $sub->from('giata_property_codes')
                         ->select('giata_property_id')
                         ->where('provider_id', $pid);
+
                     $this->applyActiveFilter($sub);
                 });
             }
@@ -152,13 +164,13 @@ class GiataCodesController extends Controller
             }
 
             // -----------------------------
-            // 6) JSON
-            // Orden: los sin nombre al final
+            // 6) JSON (OPTIMIZADO)
+            // ⚡️ simplePaginate() => NO hace COUNT(*)
             // -----------------------------
             $pageObj = $query
                 ->orderByRaw("(name IS NULL OR name = '') ASC")
                 ->orderBy('name')
-                ->paginate($perPage, ['*'], 'page', $page);
+                ->simplePaginate($perPage, ['*'], 'page', $page);
 
             $rows = $pageObj->getCollection()->map(function ($prop) {
                 $map = [];
@@ -182,8 +194,7 @@ class GiataCodesController extends Controller
                     'meta'      => [
                         'current_page' => $pageObj->currentPage(),
                         'per_page'     => $pageObj->perPage(),
-                        'total'        => $pageObj->total(),
-                        'last_page'    => $pageObj->lastPage(),
+                        'has_more'     => $pageObj->hasMorePages(),
                     ],
                 ])
                 ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
@@ -208,9 +219,7 @@ class GiataCodesController extends Controller
 
     public function export(Request $req): StreamedResponse
     {
-        // (Si quieres, te lo adapto también con la misma regla de “min 2 providers”
-        // para que el export coincida EXACTO con la tabla.)
-        $search = trim((string) $req->input('q', ''));
+        $search    = trim((string) $req->input('q', ''));
         $exportAll = (bool) $req->input('export_all', false);
 
         $perPage = max(5, min((int) $req->input('per_page', 25), 200));
@@ -266,6 +275,7 @@ class GiataCodesController extends Controller
                 $sub->from('giata_property_codes')
                     ->select('giata_property_id')
                     ->where('provider_id', $pid);
+
                 $this->applyActiveFilter($sub);
             });
         }
@@ -322,10 +332,11 @@ class GiataCodesController extends Controller
                         fflush($out);
                     });
             } else {
+                // ⚡️ también evitamos COUNT aquí
                 $pageObj = $query
                     ->orderByRaw("(name IS NULL OR name = '') ASC")
                     ->orderBy('name')
-                    ->paginate($perPage, ['*'], 'page', $page);
+                    ->simplePaginate($perPage, ['*'], 'page', $page);
 
                 foreach ($pageObj->items() as $prop) $writeProp($prop);
             }
@@ -357,7 +368,7 @@ class GiataCodesController extends Controller
 
         return response()->json(
             $rows->map(fn($r) => [
-                'name' => $r->name,
+                'name'     => $r->name,
                 'giata_id' => (int) $r->giata_id,
             ])
         );
