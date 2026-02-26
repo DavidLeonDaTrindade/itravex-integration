@@ -985,6 +985,8 @@
             logPerf('render DOM (header+rows)', tRender);
             logPerf('TOTAL fetchPage()', tAll);
 
+
+
             const m = json.meta || {
               current_page: 1,
               last_page: 1,
@@ -992,11 +994,27 @@
               per_page: perSel.value
             };
 
-            page = m.current_page;
 
-            metaEl.textContent = `Página ${m.current_page}`;
-            prevBtn.disabled = (page <= 1);
-            nextBtn.disabled = !m.has_more;
+
+
+            page = Number(m.current_page || 1);
+
+            const perPage = Number(m.per_page || perSel.value || 25);
+            const total = (m.total !== undefined && m.total !== null) ? Number(m.total) : null;
+            const lastPage = (m.last_page !== undefined && m.last_page !== null) ?
+              Number(m.last_page) :
+              (total !== null ? Math.max(1, Math.ceil(total / Math.max(1, perPage))) : null);
+
+            if (total !== null && lastPage !== null) {
+              metaEl.textContent = `Página ${page} de ${lastPage} · ${total} resultados`;
+              prevBtn.disabled = (page <= 1);
+              nextBtn.disabled = (page >= lastPage);
+            } else {
+              metaEl.textContent = `Página ${page}`;
+              prevBtn.disabled = (page <= 1);
+              nextBtn.disabled = !m.has_more;
+            }
+            // ⬆️⬆️ FIN PEGAR AQUÍ
 
           } catch (e) {
 
