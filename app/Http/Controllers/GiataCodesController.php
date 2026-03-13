@@ -357,6 +357,68 @@ class GiataCodesController extends Controller
         $safeQ = $search !== '' ? Str::slug(Str::limit($search, 40, ''), '_') : 'all';
         $filename = $exportAll ? "giata_codes_{$safeQ}_ALL.csv" : "giata_codes_{$safeQ}_page_{$page}.csv";
 
+        if ($exportAll) {
+            // Para exportaciones grandes, comprimimos en ZIP para reducir tamaño y tiempo
+            $zipFilename = str_replace('.csv', '.zip', $filename);
+            $tempZipPath = tempnam(sys_get_temp_dir(), 'giata_export_') . '.zip';
+
+            $zip = new \ZipArchive();
+            if ($zip->open($tempZipPath, \ZipArchive::CREATE) !== true) {
+                throw new \Exception('No se pudo crear el archivo ZIP');
+            }
+
+            // Generar CSV en memoria (26MB debería caber con 512M límite)
+            ob_start();
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+
+            $header = array_merge(['Hotel', 'GIATA ID'], $providers->pluck('provider_code')->all());
+            fputcsv($out, $header, ';');
+
+            $writeProp = function ($prop) use ($out, $providers) {
+                $map = [];
+                foreach ($prop->codes as $c) {
+                    $map[$c->provider_id] = isset($map[$c->provider_id])
+                        ? ($map[$c->provider_id] . ' | ' . $c->code_value)
+                        : $c->code_value;
+                }
+
+                $line = [$prop->name ?? '', (string)$prop->giata_id];
+                foreach ($providers as $p) {
+                    $val = $map[$p->id] ?? '';
+                    $val = preg_replace('/\s+/', ' ', (string)$val);
+                    $line[] = $val;
+                }
+
+                fputcsv($out, $line, ';');
+            };
+
+            $chunkSize = 10000;
+            $queryForExport = (clone $query)->orderBy('id');
+
+            if (method_exists($queryForExport, 'chunkById')) {
+                $queryForExport->chunkById($chunkSize, function ($chunk) use ($writeProp, $out) {
+                    foreach ($chunk as $prop) {
+                        $writeProp($prop);
+                    }
+                });
+            } else {
+                $queryForExport->chunk($chunkSize, function ($chunk) use ($writeProp, $out) {
+                    foreach ($chunk as $prop) {
+                        $writeProp($prop);
+                    }
+                });
+            }
+
+            fclose($out);
+            $csvContent = ob_get_clean();
+
+            $zip->addFromString($filename, $csvContent);
+            $zip->close();
+
+            return response()->download($tempZipPath, $zipFilename)->deleteFileAfterSend();
+        }
+
         return response()->streamDownload(function () use ($providers, $query, $exportAll, $perPage, $page) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF");
@@ -385,7 +447,7 @@ class GiataCodesController extends Controller
             if ($exportAll) {
                 // Exportar todo usando chunkById para evitar OFFSETs lentos en MySQL
                 // (se asume que `id` es la PK) y para no cargar todo en memoria.
-                $chunkSize = 5000; // Aumentado de 1000 a 5000 para mayor velocidad
+                $chunkSize = 10000; // Aumentado a 10000 para máxima velocidad
                 $queryForExport = (clone $query)->orderBy('id');
 
                 if (method_exists($queryForExport, 'chunkById')) {
