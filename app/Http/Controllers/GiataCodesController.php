@@ -385,7 +385,7 @@ class GiataCodesController extends Controller
             if ($exportAll) {
                 // Exportar todo usando chunkById para evitar OFFSETs lentos en MySQL
                 // (se asume que `id` es la PK) y para no cargar todo en memoria.
-                $chunkSize = 1000;
+                $chunkSize = 5000; // Aumentado de 1000 a 5000 para mayor velocidad
                 $queryForExport = (clone $query)->orderBy('id');
 
                 if (method_exists($queryForExport, 'chunkById')) {
