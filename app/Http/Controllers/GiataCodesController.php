@@ -383,13 +383,27 @@ class GiataCodesController extends Controller
             };
 
             if ($exportAll) {
-                $query
-                    ->orderByRaw("(name IS NULL OR name = '') ASC")
-                    ->orderBy('name')
-                    ->chunk(300, function ($chunk) use ($writeProp, $out) {
-                        foreach ($chunk as $prop) $writeProp($prop);
+                // Exportar todo usando chunkById para evitar OFFSETs lentos en MySQL
+                // (se asume que `id` es la PK) y para no cargar todo en memoria.
+                $chunkSize = 1000;
+                $queryForExport = (clone $query)->orderBy('id');
+
+                if (method_exists($queryForExport, 'chunkById')) {
+                    $queryForExport->chunkById($chunkSize, function ($chunk) use ($writeProp, $out) {
+                        foreach ($chunk as $prop) {
+                            $writeProp($prop);
+                        }
                         fflush($out);
                     });
+                } else {
+                    // Fallback clásico si no está disponible (Laravel antiguo)
+                    $queryForExport->chunk($chunkSize, function ($chunk) use ($writeProp, $out) {
+                        foreach ($chunk as $prop) {
+                            $writeProp($prop);
+                        }
+                        fflush($out);
+                    });
+                }
             } else {
                 $pageObj = $query
                     ->orderByRaw("(name IS NULL OR name = '') ASC")

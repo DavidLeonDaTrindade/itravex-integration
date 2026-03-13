@@ -1071,53 +1071,36 @@
           const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
           console.log('CSRF?', !!csrf);
 
-          try {
-            const res = await fetch(exportUrl, {
-              method: 'POST',
-              headers: {
-                'Accept': 'text/csv',
-                'Content-Type': 'application/json',
-                ...(csrf ? {
-                  'X-CSRF-TOKEN': csrf
-                } : {})
-              },
-              body: JSON.stringify(payload)
-            });
+          // Para descargas grandes, usamos un formulario POST que el navegador descarga
+          // directamente sin mantener todo en memoria.
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = exportUrl;
+          form.style.display = 'none';
 
-            console.log('EXPORT status', res.status, res.headers.get('content-type'));
+          const addField = (name, value) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+          };
 
-            if (!res.ok) {
-              const text = await res.text();
-              console.error('EXPORT FAIL', res.status, text.slice(0, 800));
-              alert(`Error exportando (${res.status}). Mira consola.`);
-              return;
-            }
+          if (csrf) addField('_token', csrf);
 
-            const blob = await res.blob();
-            console.log('EXPORT blob size', blob.size);
+          addField('q', payload.q ?? '');
+          addField('per_page', payload.per_page);
+          addField('page', payload.page);
+          addField('export_all', payload.export_all ? '1' : '0');
 
-            const disposition = res.headers.get('content-disposition') || '';
-            const match = disposition.match(/filename="?([^"]+)"?/i);
-            const filename = match?.[1] || `giata_codes_page_${page}.csv`;
+          payload.giata_ids.forEach(id => addField('giata_ids[]', id));
+          payload.providers.forEach(p => addField('providers[]', p));
 
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
+          document.body.appendChild(form);
+          form.submit();
+          form.remove();
 
-            setTimeout(() => {
-              URL.revokeObjectURL(url);
-              a.remove();
-            }, 0);
-
-            console.log('EXPORT OK ✅');
-          } catch (err) {
-            console.error('EXPORT exception', err);
-            alert('Error exportando. Mira consola.');
-          }
+          console.log('EXPORT triggered via form POST');
         }
 
         // Enganchar export SOLO una vez

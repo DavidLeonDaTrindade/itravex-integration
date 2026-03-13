@@ -913,28 +913,23 @@ XML;
             });
             $providers = array_keys($providerTotals);
 
-            $matrix = [];
-            foreach ($visibleHotels as $h) {
-                $counts = array_fill_keys($providers, 0);
-                foreach ($h['rooms'] as $room) {
-                    $p = (string)($room['codtou'] ?? '');
-                    if ($p !== '' && isset($counts[$p])) $counts[$p]++;
-                }
-                $matrix[] = [
-                    'name'   => $h['name'] . " ({$h['code']})",
-                    'counts' => $counts,
-                    'total'  => array_sum($counts),
-                ];
-            }
-            usort($matrix, fn($a, $b) => $b['total'] <=> $a['total']);
-
-            return response()->streamDownload(function () use ($matrix, $providers) {
+            return response()->streamDownload(function () use ($visibleHotels, $providers) {
                 $out = fopen('php://output', 'w');
                 fwrite($out, "\xEF\xBB\xBF");
                 fputcsv($out, array_merge(['Nombre Hotel'], $providers, ['Total']));
-                foreach ($matrix as $row) {
-                    fputcsv($out, array_merge([$row['name']], array_values($row['counts']), [$row['total']]));
+
+                // Procesar cada hotel uno por uno para evitar cargar todo en memoria
+                foreach ($visibleHotels as $h) {
+                    $counts = array_fill_keys($providers, 0);
+                    foreach ($h['rooms'] as $room) {
+                        $p = (string)($room['codtou'] ?? '');
+                        if ($p !== '' && isset($counts[$p])) $counts[$p]++;
+                    }
+                    $total = array_sum($counts);
+                    fputcsv($out, array_merge([$h['name'] . " ({$h['code']})"], array_values($counts), [$total]));
+                    fflush($out); // Forzar envío de datos
                 }
+
                 fclose($out);
             }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
         }

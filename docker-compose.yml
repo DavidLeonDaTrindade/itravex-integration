@@ -1,4 +1,4 @@
-name: itravex-integration
+version: "3.9"
 
 services:
   app:
@@ -14,6 +14,7 @@ services:
       - mysql
     environment:
       APACHE_DOCUMENT_ROOT: /var/www/html/public
+
   worker:
     build:
       context: .
@@ -26,7 +27,7 @@ services:
     environment:
       APACHE_DOCUMENT_ROOT: /var/www/html/public
     command: php artisan queue:work --queue=default --sleep=1 --tries=3
-    restart: unless-stopped  
+    restart: unless-stopped
 
   mysql:
     image: mysql:8.0
@@ -39,6 +40,11 @@ services:
       MYSQL_ROOT_PASSWORD: "Portu628."
       MYSQL_USER: app
       MYSQL_PASSWORD: "Portu628."
+    # ✅ Ajustes para imports grandes / mejor rendimiento en local
+    command:
+      - --innodb_redo_log_capacity=2147483648
+      - --innodb_flush_log_at_trx_commit=2
+      - --sync_binlog=0
     volumes:
       - dbdata:/var/lib/mysql
 
