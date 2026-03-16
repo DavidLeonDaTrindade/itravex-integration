@@ -7,8 +7,8 @@
 public/hot
 public/storage
 backups/
+.phpunit.result.cache
 
 # dumps
 *.sql
 *.sql.gz
-

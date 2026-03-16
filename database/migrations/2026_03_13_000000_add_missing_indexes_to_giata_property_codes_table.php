@@ -11,14 +11,25 @@ return new class extends Migration
         // Algunos entornos ya pueden tener estos índices (p.ej. si se aplicaron manualmente).
         // Aquí los creamos solo si no existen para no romper migraciones repetidas.
         $connection = Schema::getConnection();
-        $hasIdxProviderProperty = (bool) $connection->selectOne(
-            "SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
-            [$connection->getDatabaseName(), 'giata_property_codes', 'idx_provider_property']
-        );
-        $hasIdxProviderStatusProperty = (bool) $connection->selectOne(
-            "SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
-            [$connection->getDatabaseName(), 'giata_property_codes', 'idx_provider_status_property']
-        );
+        $driver = $connection->getDriverName();
+
+        if ($driver === 'sqlite') {
+            $indexes = collect($connection->select("PRAGMA index_list('giata_property_codes')"))
+                ->pluck('name')
+                ->all();
+
+            $hasIdxProviderProperty = in_array('idx_provider_property', $indexes, true);
+            $hasIdxProviderStatusProperty = in_array('idx_provider_status_property', $indexes, true);
+        } else {
+            $hasIdxProviderProperty = (bool) $connection->selectOne(
+                "SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+                [$connection->getDatabaseName(), 'giata_property_codes', 'idx_provider_property']
+            );
+            $hasIdxProviderStatusProperty = (bool) $connection->selectOne(
+                "SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+                [$connection->getDatabaseName(), 'giata_property_codes', 'idx_provider_status_property']
+            );
+        }
 
         Schema::table('giata_property_codes', function (Blueprint $table) use ($hasIdxProviderProperty, $hasIdxProviderStatusProperty) {
             if (! $hasIdxProviderProperty) {

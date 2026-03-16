@@ -9,7 +9,12 @@ abstract class BaseClientModel extends Model
 {
     public function getConnectionName()
     {
-        // 1) Prioriza lo que pusimos en sesión al hacer login
+        // 1) Prioriza la conexión activa elegida en la sesión actual.
+        if (session()->has('db_connection')) {
+            return session('db_connection');
+        }
+
+        // Compatibilidad con la clave antigua usada al hacer login.
         if (session()->has('db_conn')) {
             return session('db_conn');
         }

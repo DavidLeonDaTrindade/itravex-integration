@@ -39,5 +39,11 @@ return [
         'user'     => env('GIATA_USER'),
         'pass'     => env('GIATA_PASSWORD'),
     ],
+    'samo' => [
+        'base_url' => env('SAMO_BASE_URL', 'http://lib-samo.dome-consulting.com/service'),
+        'username' => env('SAMO_USERNAME', 'JU_SAMO_XML'),
+        'password' => env('SAMO_PASSWORD', 'JU_SAMO_XML77'),
+        'claim_number' => env('SAMO_CLAIM_NUMBER', 1510263),
+    ],
 
 ];

@@ -1,18 +1,74 @@
 <nav x-data="{ open: false }"
     class="bg-slate-200/80 backdrop-blur border-b border-slate-300 shadow-sm">
 
+    @php
+        $db = session('db_connection', 'mysql');
+        $isCli2 = $db === 'mysql_cli2';
+    @endphp
+
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
 
             <!-- LEFT -->
             <div class="flex items-center">
-                <div class="hidden sm:flex space-x-8 sm:ms-6">
+                <div class="hidden sm:flex items-center gap-6 sm:ms-6">
                     <x-nav-link
                         :href="route('dashboard')"
                         :active="request()->routeIs('dashboard')"
                         class="text-base font-semibold tracking-wide">
                         {{ __('Inicio') }}
                     </x-nav-link>
+
+                    <x-nav-link
+                        :href="route('claim-confirmations.index')"
+                        :active="request()->routeIs('claim-confirmations.*')"
+                        class="text-base font-semibold tracking-wide">
+                        {{ __('Claim Confirmations') }}
+                    </x-nav-link>
+
+                    <x-nav-link
+                        :href="route('availability.form')"
+                        :active="request()->routeIs('availability.*')"
+                        class="text-base font-semibold tracking-wide">
+                        {{ __('Disponibilidad') }}
+                    </x-nav-link>
+
+                    <x-nav-link
+                        :href="route('itravex.status')"
+                        :active="request()->routeIs('itravex.status')"
+                        class="text-base font-semibold tracking-wide">
+                        {{ __('Estado Locata') }}
+                    </x-nav-link>
+
+                    <x-nav-link
+                        :href="route('logs.itravex')"
+                        :active="request()->routeIs('logs.itravex*')"
+                        class="text-base font-semibold tracking-wide">
+                        {{ __('Logs') }}
+                    </x-nav-link>
+
+                    @if(! $isCli2)
+                        <x-nav-link
+                            :href="route('giata.properties.raw.index')"
+                            :active="request()->routeIs('giata.properties.raw.*')"
+                            class="text-base font-semibold tracking-wide">
+                            {{ __('GIATA Propiedades') }}
+                        </x-nav-link>
+
+                        <x-nav-link
+                            :href="route('giata.providers.index')"
+                            :active="request()->routeIs('giata.providers.*')"
+                            class="text-base font-semibold tracking-wide">
+                            {{ __('GIATA Proveedores') }}
+                        </x-nav-link>
+
+                        <x-nav-link
+                            :href="route('giata.codes.browser')"
+                            :active="request()->routeIs('giata.codes.browser')"
+                            class="text-base font-semibold tracking-wide">
+                            {{ __('GIATA Codigos') }}
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -83,6 +139,36 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Inicio') }}
             </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('claim-confirmations.index')" :active="request()->routeIs('claim-confirmations.*')">
+                {{ __('Claim Confirmations') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('availability.form')" :active="request()->routeIs('availability.*')">
+                {{ __('Disponibilidad') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('itravex.status')" :active="request()->routeIs('itravex.status')">
+                {{ __('Estado Locata') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('logs.itravex')" :active="request()->routeIs('logs.itravex*')">
+                {{ __('Logs') }}
+            </x-responsive-nav-link>
+
+            @if(! $isCli2)
+                <x-responsive-nav-link :href="route('giata.properties.raw.index')" :active="request()->routeIs('giata.properties.raw.*')">
+                    {{ __('GIATA Propiedades') }}
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('giata.providers.index')" :active="request()->routeIs('giata.providers.*')">
+                    {{ __('GIATA Proveedores') }}
+                </x-responsive-nav-link>
+
+                <x-responsive-nav-link :href="route('giata.codes.browser')" :active="request()->routeIs('giata.codes.browser')">
+                    {{ __('GIATA Codigos') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <div class="pt-4 pb-1 border-t border-slate-300">

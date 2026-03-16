@@ -17,6 +17,7 @@ use App\Http\Controllers\GiataProviderController;
 use App\Http\Controllers\GiataCodesController;
 use App\Http\Controllers\GiataPropertyRawController;
 use App\Http\Controllers\GiataCodesBrowserController;
+use App\Http\Controllers\ClaimConfirmationController;
 
 
 
@@ -107,6 +108,13 @@ Route::middleware(['auth'])->group(function () {
     // ---- Status Itravex (usa ItravexReservationController) ----
     Route::get('/itravex/status', [ItravexReservationController::class, 'index'])
         ->name('itravex.status');
+
+    Route::get('/claim-confirmations', [ClaimConfirmationController::class, 'index'])
+        ->name('claim-confirmations.index');
+
+    Route::post('/claim-confirmations/sync', [ClaimConfirmationController::class, 'sync'])
+        ->middleware('throttle:3,1')
+        ->name('claim-confirmations.sync');
 
     // Eliminar una reserva guardada en BD (opcional: restringe a admin dentro del controller)
     Route::delete('/itravex/{id}', [ItravexReservationController::class, 'destroy'])
