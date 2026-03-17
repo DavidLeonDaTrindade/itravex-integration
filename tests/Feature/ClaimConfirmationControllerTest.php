@@ -72,6 +72,54 @@ class ClaimConfirmationControllerTest extends TestCase
         ]);
     }
 
+    public function test_authenticated_users_can_export_the_latest_claim_confirmations_to_csv(): void
+    {
+        ClaimConfirmation::query()->create([
+            'claim' => 1001,
+            'changestamp' => 10,
+            'status' => 'PENDING',
+            'flag' => '0',
+            'comment' => 'older row',
+            'cost' => 1.25,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 1002,
+            'changestamp' => 20,
+            'status' => 'CONFIRMED',
+            'flag' => '1',
+            'comment' => 'newest row',
+            'cost' => 2.50,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 1000,
+            'changestamp' => 20,
+            'status' => 'CONFIRMED',
+            'flag' => '0',
+            'comment' => 'same changestamp lower claim',
+            'cost' => 3.75,
+        ]);
+
+        $response = $this
+            ->withoutMiddleware([AcceptDbConnParam::class, EnsureClientConnection::class])
+            ->actingAs(User::factory()->make())
+            ->get(route('claim-confirmations.export', ['limit' => 2]));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString(
+            "id,claim,changestamp,status,flag,comment,cost,created_at,updated_at",
+            $csv
+        );
+        $this->assertStringContainsString('1002,20,CONFIRMED,1,"newest row",2.5000', $csv);
+        $this->assertStringContainsString('1000,20,CONFIRMED,0,"same changestamp lower claim",3.7500', $csv);
+        $this->assertStringNotContainsString('1001,10,PENDING,0,"older row",1.2500', $csv);
+    }
+
     private function xmlResponse(string $payload, int $newChangestamp): string
     {
         return <<<XML

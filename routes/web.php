@@ -112,6 +112,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/claim-confirmations', [ClaimConfirmationController::class, 'index'])
         ->name('claim-confirmations.index');
 
+    Route::get('/claim-confirmations/export', [ClaimConfirmationController::class, 'export'])
+        ->name('claim-confirmations.export');
+
     Route::post('/claim-confirmations/sync', [ClaimConfirmationController::class, 'sync'])
         ->middleware('throttle:3,1')
         ->name('claim-confirmations.sync');

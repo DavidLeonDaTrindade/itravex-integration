@@ -87,6 +87,52 @@
           </div>
         </div>
 
+        <div class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-900">Exportar a CSV</p>
+              <p class="mt-1 text-sm text-slate-600">
+                Descarga los registros mas recientes indicando cuantas filas necesitas exportar.
+              </p>
+            </div>
+
+            <form method="GET" action="{{ route('claim-confirmations.export') }}" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div>
+                <label for="export_limit" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Numero de filas
+                </label>
+                <input
+                  id="export_limit"
+                  name="limit"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value="{{ old('limit', 100) }}"
+                  class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 sm:w-40"
+                >
+                @error('limit')
+                  <p class="mt-2 text-xs text-rose-600">{{ $message }}</p>
+                @enderror
+              </div>
+
+              <button
+                type="submit"
+                class="group inline-flex min-h-12 items-center justify-center gap-3 rounded-2xl border border-slate-900 bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(15,23,42,0.16)] transition hover:-translate-y-0.5 hover:bg-[#004665] hover:shadow-[0_18px_32px_rgba(0,70,101,0.22)] focus:outline-none focus:ring-2 focus:ring-slate-300"
+              >
+                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15 transition group-hover:bg-white/15">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1" />
+                  </svg>
+                </span>
+                <span class="flex flex-col items-start leading-none">
+                  <span>Exportar CSV</span>
+                  <span class="mt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-300">Ultimos registros</span>
+                </span>
+              </button>
+            </form>
+          </div>
+        </div>
+
         <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200">
