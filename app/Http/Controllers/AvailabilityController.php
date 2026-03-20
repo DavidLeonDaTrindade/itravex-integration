@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Carbon\Carbon;
 use SimpleXMLElement;
 use App\Models\Zone;
 use Illuminate\Support\Facades\Log;
@@ -87,6 +88,34 @@ class AvailabilityController extends Controller
 
     public function checkAvailability(Request $request)
     {
+        $extractCancellationMeta = static function ($room): array {
+            $dates = [];
+
+            foreach ($room->rstcan ?? [] as $rule) {
+                $rawDate = trim((string) ($rule->feccan ?? ''));
+                if ($rawDate === '') {
+                    continue;
+                }
+
+                try {
+                    $dates[] = Carbon::createFromFormat('d/m/Y', $rawDate)->startOfDay();
+                } catch (\Throwable $exception) {
+                    continue;
+                }
+            }
+
+            usort($dates, static fn(Carbon $a, Carbon $b) => $a <=> $b);
+
+            $firstDate = $dates[0] ?? null;
+            $tipprt = strtoupper(trim((string) ($room->infprt->tipprt ?? '')));
+
+            return [
+                'tipprt' => $tipprt,
+                'cancellation_starts_at' => $firstDate?->format('Y-m-d'),
+                'is_non_refundable' => str_contains($tipprt, 'NRE'),
+            ];
+        };
+
         // === PRIMERA FASE: si llega POST, guardamos hotel_codes en cache y redirigimos a GET con 'k' (PRG) ===
         if ($request->isMethod('post')) {
             // Validación en POST (igual que la tuya)
@@ -454,6 +483,7 @@ XML;
 
                         $price = (float) $room->impnoc;
                         if ($price == 0 && isset($room->impcom)) $price = (float) $room->impcom;
+                        $cancellationMeta = $extractCancellationMeta($room);
 
                         $rooms[] = [
                             'room_type'        => (string) $room->codsmo,
@@ -466,7 +496,9 @@ XML;
                             'codtou'           => $codtou,
                             'refdis'          => $refdisAttr,
                             'infrcl'          => $infrclVal,
-
+                            'tipprt'          => $cancellationMeta['tipprt'],
+                            'cancellation_starts_at' => $cancellationMeta['cancellation_starts_at'],
+                            'is_non_refundable' => $cancellationMeta['is_non_refundable'],
                         ];
                         $totalRooms++;
                     }
@@ -656,7 +688,7 @@ XML;
             $t_http0 = microtime(true);
             $each = new \GuzzleHttp\Promise\EachPromise($promises, [
                 'concurrency' => $maxConcurrency,
-                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets) {
+                'fulfilled' => function ($response) use (&$firstHeaders, &$totalBytes, &$allHotels, &$totalRooms, &$internalRateCount, &$externalRateCount, &$externalALWRates, &$providerRateCounts, &$hotelRateCounts, &$providerHotelSets, $extractCancellationMeta) {
                     if ($firstHeaders === null) {
                         $firstHeaders = [
                             'date'              => $response->getHeaderLine('Date') ?: null,
@@ -712,6 +744,7 @@ XML;
 
                             $price = (float) $room->impnoc;
                             if ($price == 0 && isset($room->impcom)) $price = (float) $room->impcom;
+                            $cancellationMeta = $extractCancellationMeta($room);
 
                             // 🔴 Añadido: leer infrcl y refdis (atributo o inferido)
                             $refdisAttr = isset($room['refdis']) ? (int) $room['refdis'] : null;
@@ -734,6 +767,9 @@ XML;
                                 // ✅ Claves que el Blade usa para packs 2x
                                 'refdis'           => $refdisAttr,
                                 'infrcl'           => $infrclVal,
+                                'tipprt'           => $cancellationMeta['tipprt'],
+                                'cancellation_starts_at' => $cancellationMeta['cancellation_starts_at'],
+                                'is_non_refundable' => $cancellationMeta['is_non_refundable'],
                             ];
                             $totalRooms++;
                         }
@@ -776,8 +812,27 @@ XML;
         $offset = ($currentPage - 1) * $perPage;
         $visibleHotels = array_slice($allHotels, $offset, $perPage);
 
+        $zoneCodes = collect($visibleHotels)
+            ->map(fn($hotel) => (string) ($hotel['zone_code'] ?? $hotel['zone'] ?? ''))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $zoneNamesByCode = $zoneCodes->isNotEmpty()
+            ? Zone::query()
+                ->whereIn('code', $zoneCodes->all())
+                ->pluck('name', 'code')
+                ->toArray()
+            : [];
+
         // Enriquecer cada hotel visible con totales y desglose por proveedor
         foreach ($visibleHotels as &$h) {
+            $zoneCode = (string) ($h['zone_code'] ?? $h['zone'] ?? '');
+            if ($zoneCode !== '') {
+                $h['zone_code'] = $zoneCode;
+                $h['zone_name'] = $zoneNamesByCode[$zoneCode] ?? ($h['zone_name'] ?? null);
+            }
+
             $h['rate_count'] = is_countable($h['rooms'] ?? null) ? count($h['rooms']) : 0;
             $provCounts = [];
             foreach ($h['rooms'] ?? [] as $r) {

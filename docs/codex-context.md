@@ -190,3 +190,17 @@ Lee primero /home/david/projects/itravex-integration/docs/codex-context.md
 Trabaja sobre /home/david/projects/itravex-integration
 Objetivo: <tu tarea>
 ```
+
+## Documentacion tecnica interna
+
+Existe una seccion tecnica dedicada en:
+
+- `docs/technical/README.md`
+
+Usarla cuando haga falta una vista estructurada de:
+
+- arquitectura general
+- modulos funcionales
+- capa de datos
+- integraciones y comandos
+- operacion y testing

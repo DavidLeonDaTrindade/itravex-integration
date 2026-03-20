@@ -349,22 +349,22 @@
                     display: inline-flex;
                     align-items: center;
                     gap: .5rem;
-                    padding: .375rem .75rem;
-                    border-radius: .5rem;
-                    background: #4f46e5;
+                    padding: .5rem .95rem;
+                    border-radius: .8rem;
+                    background: linear-gradient(135deg, #004665 0%, #0f5f86 100%);
                     color: #fff;
-                    border: 1px solid rgba(0, 0, 0, .06);
-                    box-shadow: 0 1px 1px rgba(0, 0, 0, .05);
-                    font: 600 .875rem/1.25 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+                    border: 1px solid rgba(0, 70, 101, .28);
+                    box-shadow: 0 10px 24px rgba(0, 70, 101, .18);
+                    font: 700 .875rem/1.25 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
                     cursor: pointer;
                     transition: .2s ease;
                     white-space: nowrap;
                 }
 
                 .btn-sel:hover {
-                    background: #6366f1;
-                    box-shadow: 0 3px 8px rgba(79, 70, 229, .25);
-                    transform: translateY(-1px);
+                    background: linear-gradient(135deg, #0b3550 0%, #004665 100%);
+                    box-shadow: 0 14px 28px rgba(0, 70, 101, .24);
+                    transform: translateY(-2px);
                 }
 
                 .btn-sel:active {
@@ -402,11 +402,75 @@
                 }
 
                 .card {
-                    background: #fff;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 12px;
+                    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+                    border: 1px solid #d9e3ee;
+                    border-radius: 1rem;
+                    padding: 1rem 1.1rem;
+                    box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+                }
+
+                .metric-card {
+                    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+                    border: 1px solid #dbe5f0;
+                    border-radius: 1.1rem;
                     padding: 1rem;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+                    box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+                }
+
+                .hotel-card {
+                    background:
+                        radial-gradient(circle at top right, rgba(14, 165, 233, .08), transparent 28%),
+                        linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+                    border: 1px solid #dbe5f0;
+                    border-radius: 1.4rem;
+                    padding: 1.5rem;
+                    box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
+                    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+                }
+
+                .hotel-card:hover {
+                    transform: translateY(-3px);
+                    border-color: #b9cede;
+                    box-shadow: 0 18px 40px rgba(15, 23, 42, .12);
+                }
+
+                .hotel-card__title {
+                    color: #1d4ed8;
+                    font-size: 1.9rem;
+                    line-height: 1;
+                    letter-spacing: -.025em;
+                }
+
+                .hotel-card__meta {
+                    color: #64748b;
+                    font-size: .95rem;
+                }
+
+                .hotel-card__summary {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: .55rem;
+                    margin-top: .9rem;
+                }
+
+                .hotel-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: .38rem;
+                    padding: .42rem .72rem;
+                    border-radius: 999px;
+                    border: 1px solid #d8e2ec;
+                    background: #f8fbff;
+                    color: #475569;
+                    font: 600 .76rem/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+                }
+
+                .rooms-panel summary {
+                    padding: .15rem 0;
+                }
+
+                .rooms-panel[open] summary {
+                    margin-bottom: .8rem;
                 }
 
                 /* ===========================
@@ -485,8 +549,9 @@
 
                 .room-price {
                     font-weight: 700;
-                    color: #065f46;
-                    font-size: 1.2rem;
+                    color: #047857;
+                    font-size: 1.35rem;
+                    letter-spacing: -.02em;
                 }
 
                 @media (max-width: 640px) {
@@ -537,6 +602,12 @@
                     background: #E8F1FF;
                     color: #0B4AA2;
                     border-color: #BBD4FF;
+                }
+
+                .badge-tnr {
+                    background: #FFF1F2;
+                    color: #BE123C;
+                    border-color: #FECDD3;
                 }
 
                 /* ===========================
@@ -671,7 +742,7 @@
                 .room-pack .rooms-grid .room-chip {
                     border: 1px solid #e2e8f0;
                     /* slate-200 */
-                    background: #f8fafc;
+                    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
                     /* slate-50 */
                     border-radius: .5rem;
                     /* rounded-lg */
@@ -1184,38 +1255,38 @@
                     @php
                     $p = is_array($perf) ? $perf : [];
                     @endphp
-                    <div class="mb-8 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                    <div class="mb-8 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                        <div class="metric-card">
                             <p class="text-xs text-gray-500">🗄️ BD (paginación)</p>
                             <p class="text-lg font-semibold text-blue-800">{{ $p['db_ms'] ?? '—' }} ms</p>
                             <p class="text-xs text-gray-500 mt-1">Tiempo en obtener los hoteles de la base de datos.</p>
                         </div>
 
-                        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div class="metric-card">
                             <p class="text-xs text-gray-500">🌐 HTTP (pool)</p>
                             <p class="text-lg font-semibold text-blue-800">{{ $p['http_ms'] ?? '—' }} ms</p>
                             <p class="text-xs text-gray-500 mt-1">Tiempo total de las peticiones al proveedor.</p>
                         </div>
 
-                        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div class="metric-card">
                             <p class="text-xs text-gray-500">🧩 Parseo XML</p>
                             <p class="text-lg font-semibold text-blue-800">{{ $p['parse_ms'] ?? '—' }} ms</p>
                             <p class="text-xs text-gray-500 mt-1">Tiempo en convertir el XML en datos PHP.</p>
                         </div>
 
-                        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div class="metric-card">
                             <p class="text-xs text-gray-500">🧮 Agregación</p>
                             <p class="text-lg font-semibold text-blue-800">{{ $p['aggregate_ms'] ?? '—' }} ms</p>
                             <p class="text-xs text-gray-500 mt-1">Tiempo en combinar y preparar los datos para la vista.</p>
                         </div>
 
-                        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div class="metric-card">
                             <p class="text-xs text-gray-500">🧠 Memoria pico</p>
                             <p class="text-lg font-semibold text-blue-800">{{ $p['peak_mem_mb'] ?? '—' }} MiB</p>
                             <p class="text-xs text-gray-500 mt-1">Memoria máxima usada durante el proceso.</p>
                         </div>
 
-                        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                        <div class="metric-card">
                             <p class="text-xs text-gray-500">🔚 Total app</p>
                             <p class="text-lg font-semibold text-blue-800">{{ $p['total_ms'] ?? '—' }} ms</p>
                             <p class="text-xs text-gray-500 mt-1">
@@ -1376,17 +1447,18 @@
                                 {{-- 2) Si NO hay habitaciones o el "Desde" es 0/nulo, saltar ANTES de abrir la card --}}
                                 @if($roomsAll->isEmpty() || $minDisplayPrice === null || $minDisplayPrice <= 0) @continue @endif
                                     {{-- 3) A partir de aquí pintamos la card con seguridad --}} <div
-                                    class="bg-white rounded-2xl border border-gray-200 shadow hover:shadow-lg transition p-6 flex flex-col justify-between">
+                                    class="hotel-card flex flex-col justify-between">
                                     <div class="mb-4">
-                                        <h2 class="text-xl font-bold text-blue-800 mb-1">{{ $hotel['name'] }}</h2>
-                                        <p class="text-sm text-gray-500 mb-1">⭐ Categoría: {{ $hotel['category'] }}</p>
-                                        <p class="text-sm text-gray-500">
-                                            🏷 Código:
-                                            {{ data_get($hotel, 'codser') ?? data_get($hotel, 'code', '—') }}
-                                            | 📍 Zona:
-                                            {{ data_get($hotel, 'zone_code', data_get($hotel, 'zone', '—')) }}
-                                            — {{ data_get($hotel, 'zone_name', 'Sin nombre') }}
-                                        </p>
+                                        <h2 class="hotel-card__title mb-2 font-bold">{{ $hotel['name'] }}</h2>
+                                        <p class="hotel-card__meta">Categoria: {{ $hotel['category'] }}</p>
+                                        <div class="hotel-card__summary">
+                                            <span class="hotel-pill">
+                                                🏷 Código: {{ data_get($hotel, 'codser') ?? data_get($hotel, 'code', '—') }}
+                                            </span>
+                                            <span class="hotel-pill">
+                                                📍 Zona: {{ data_get($hotel, 'zone_code', data_get($hotel, 'zone', '—')) }} · {{ data_get($hotel, 'zone_name', 'Sin nombre') }}
+                                            </span>
+                                        </div>
 
                                         {{-- 📦 Tarifas por proveedor --}}
                                         @php
@@ -1421,7 +1493,7 @@
 
                                         {{-- Detalle de habitaciones / packs --}}
                                         <div class="mb-4">
-                                            <details class="group">
+                                            <details class="group rooms-panel">
                                                 @php
                                                 // 1) Todas las habitaciones del hotel ordenadas por precio:
                                                 $roomsAll = collect($hotel['rooms'] ?? []);
@@ -1554,6 +1626,10 @@
                                                                 $boardDesc = $ralLabel !== '' ? $ralLabel : '—';
 
                                                                 $price = (float) ($r['price_per_night'] ?? 0);
+                                                                $isNonRefundable = !empty($r['is_non_refundable']);
+                                                                $cancellationStartsAt = !empty($r['cancellation_starts_at'])
+                                                                ? \Illuminate\Support\Carbon::parse($r['cancellation_starts_at'])->format('d/m/Y')
+                                                                : null;
                                                                 @endphp
 
                                                                 <li class="room-item {{ $isInternal ? 'is-internal' : '' }} {{ $isChannel ? 'is-channel' : '' }}">
@@ -1583,6 +1659,15 @@
                                                                             @if($isChannel)
                                                                             <span class="badge badge-channel ml-2">Channel</span>
                                                                             @endif
+                                                                            @if($isNonRefundable)
+                                                                            <span class="badge badge-tnr ml-2">TNR</span>
+                                                                            @endif
+                                                                        </p>
+                                                                        <p class="mt-1 text-xs text-slate-600">
+                                                                            Cancelación:
+                                                                            <span class="font-semibold text-slate-800">
+                                                                                {{ $isNonRefundable ? 'No reembolsable' : ($cancellationStartsAt ?? 'Sin datos') }}
+                                                                            </span>
                                                                         </p>
                                                                         @endif
                                                                     </div>
@@ -1758,23 +1843,42 @@
                                                                                         $internalCodtous, true);
                                                                                         $isChannel = in_array($prov,
                                                                                         $channelCodtous, true);
+                                                                                        $packIsNonRefundable = collect($pack['refs'] ?? [])
+                                                                                        ->contains(fn ($room) => !empty($room['is_non_refundable']));
+                                                                                        $packCancellationStart = collect($pack['refs'] ?? [])
+                                                                                        ->pluck('cancellation_starts_at')
+                                                                                        ->filter()
+                                                                                        ->sort()
+                                                                                        ->first();
                                                                                         @endphp
 
                                                                                         <div
-                                                                                            class="flex items-center gap-2 text-xs">
-                                                                                            <span
-                                                                                                class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 ring-1 ring-amber-200 text-amber-800">
-                                                                                                Proveedor
-                                                                                            </span>
-                                                                                            <span
-                                                                                                class="font-semibold text-slate-900">{{ $provLabel($prov) }}</span>
-                                                                                            @if($isInternal)
-                                                                                            <span
-                                                                                                class="badge badge-internal ml-2">Interna</span>
-                                                                                            @elseif($isChannel)
-                                                                                            <span
-                                                                                                class="badge badge-channel ml-2">Channel</span>
-                                                                                            @endif
+                                                                                            class="space-y-2 text-xs">
+                                                                                            <div class="flex items-center gap-2">
+                                                                                                <span
+                                                                                                    class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 ring-1 ring-amber-200 text-amber-800">
+                                                                                                    Proveedor
+                                                                                                </span>
+                                                                                                <span
+                                                                                                    class="font-semibold text-slate-900">{{ $provLabel($prov) }}</span>
+                                                                                                @if($isInternal)
+                                                                                                <span
+                                                                                                    class="badge badge-internal ml-2">Interna</span>
+                                                                                                @elseif($isChannel)
+                                                                                                <span
+                                                                                                    class="badge badge-channel ml-2">Channel</span>
+                                                                                                @endif
+                                                                                                @if($packIsNonRefundable)
+                                                                                                <span
+                                                                                                    class="badge badge-tnr ml-2">TNR</span>
+                                                                                                @endif
+                                                                                            </div>
+                                                                                            <p class="text-slate-600">
+                                                                                                Cancelación:
+                                                                                                <span class="font-semibold text-slate-800">
+                                                                                                    {{ $packIsNonRefundable ? 'No reembolsable' : ($packCancellationStart ? \Illuminate\Support\Carbon::parse($packCancellationStart)->format('d/m/Y') : 'Sin datos') }}
+                                                                                                </span>
+                                                                                            </p>
                                                                                         </div>
                                                                                     </div>
 
@@ -1899,8 +2003,8 @@
                                         </div>
 
                                         {{-- Pie: "Desde" ya validado (> 0) --}}
-                                        <div class="mt-auto">
-                                            <p class="text-right text-lg font-bold text-green-600">
+                                        <div class="mt-auto border-t border-slate-100 pt-4">
+                                            <p class="text-right text-xl font-bold text-emerald-600">
                                                 Desde {{ number_format($minDisplayPrice, 2) }} {{ $currency }}
                                             </p>
                                         </div>
