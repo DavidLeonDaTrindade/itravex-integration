@@ -120,6 +120,132 @@ class ClaimConfirmationControllerTest extends TestCase
         $this->assertStringNotContainsString('1001,10,PENDING,0,"older row",1.2500', $csv);
     }
 
+    public function test_authenticated_users_can_export_all_claim_confirmations_when_no_filters_or_limit_are_applied(): void
+    {
+        ClaimConfirmation::query()->create([
+            'claim' => 1101,
+            'changestamp' => 10,
+            'status' => 'CONFIRMED',
+            'flag' => '0',
+            'comment' => 'first row',
+            'cost' => 1.25,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 1102,
+            'changestamp' => 20,
+            'status' => 'NOT CONFIRMED',
+            'flag' => '1',
+            'comment' => 'second row',
+            'cost' => 2.50,
+        ]);
+
+        $response = $this
+            ->withoutMiddleware([AcceptDbConnParam::class, EnsureClientConnection::class])
+            ->actingAs(User::factory()->make())
+            ->get(route('claim-confirmations.export'));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString('1101,10,CONFIRMED,0,"first row",1.2500', $csv);
+        $this->assertStringContainsString('1102,20,"NOT CONFIRMED",1,"second row",2.5000', $csv);
+    }
+
+    public function test_authenticated_users_can_export_only_the_filtered_claim_confirmations_to_csv(): void
+    {
+        ClaimConfirmation::query()->create([
+            'claim' => 1201,
+            'changestamp' => 30,
+            'status' => 'CONFIRMED',
+            'flag' => '0',
+            'comment' => 'OUR REF: OK1201',
+            'cost' => 0,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 1202,
+            'changestamp' => 31,
+            'status' => 'NOT CONFIRMED',
+            'flag' => '0',
+            'comment' => 'ERROR: room unavailable',
+            'cost' => 0,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 1203,
+            'changestamp' => 32,
+            'status' => 'NOT CONFIRMED',
+            'flag' => '0',
+            'comment' => 'Pending manual review',
+            'cost' => 0,
+        ]);
+
+        $response = $this
+            ->withoutMiddleware([AcceptDbConnParam::class, EnsureClientConnection::class])
+            ->actingAs(User::factory()->make())
+            ->get(route('claim-confirmations.export', [
+                'status' => 'NOT CONFIRMED',
+                'comment_error' => 1,
+            ]));
+
+        $response->assertOk();
+
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString('1202,31,"NOT CONFIRMED",0,"ERROR: room unavailable",0.0000', $csv);
+        $this->assertStringNotContainsString('1201,30,CONFIRMED,0,"OUR REF: OK1201",0.0000', $csv);
+        $this->assertStringNotContainsString('1203,32,"NOT CONFIRMED",0,"Pending manual review",0.0000', $csv);
+    }
+
+    public function test_authenticated_users_can_filter_claim_confirmations_by_status_and_error_comment(): void
+    {
+        ClaimConfirmation::query()->create([
+            'claim' => 2001,
+            'changestamp' => 30,
+            'status' => 'CONFIRMED',
+            'flag' => '0',
+            'comment' => 'OUR REF: OK2001',
+            'cost' => 0,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 2002,
+            'changestamp' => 31,
+            'status' => 'NOT CONFIRMED',
+            'flag' => '0',
+            'comment' => 'ERROR: room unavailable',
+            'cost' => 0,
+        ]);
+
+        ClaimConfirmation::query()->create([
+            'claim' => 2003,
+            'changestamp' => 32,
+            'status' => 'NOT CONFIRMED',
+            'flag' => '0',
+            'comment' => 'Pending manual review',
+            'cost' => 0,
+        ]);
+
+        $response = $this
+            ->withoutMiddleware([AcceptDbConnParam::class, EnsureClientConnection::class])
+            ->actingAs(User::factory()->make())
+            ->get(route('claim-confirmations.index', [
+                'status' => 'NOT CONFIRMED',
+                'comment_error' => 1,
+            ]));
+
+        $response->assertOk();
+        $response->assertSee('2002');
+        $response->assertSee('ERROR: room unavailable');
+        $response->assertDontSee('2001');
+        $response->assertDontSee('OUR REF: OK2001');
+        $response->assertDontSee('2003');
+        $response->assertDontSee('Pending manual review');
+    }
+
     private function xmlResponse(string $payload, int $newChangestamp): string
     {
         return <<<XML

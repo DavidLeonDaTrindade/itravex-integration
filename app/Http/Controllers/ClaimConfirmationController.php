@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Database\Eloquent\Builder;
 use App\Models\ClaimConfirmation;
 use App\Services\ClaimConfirmationSyncService;
 use Illuminate\Http\RedirectResponse;
@@ -13,12 +14,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClaimConfirmationController extends Controller
 {
-    private const EXPORT_LIMIT_DEFAULT = 100;
     private const EXPORT_LIMIT_MAX = 1000;
 
     public function index(Request $request)
     {
         $connection = DB::getDefaultConnection();
+        $filters = $this->extractFilters(
+            $request->validate($this->filterRules())
+        );
 
         if (! Schema::connection($connection)->hasTable('claim_confirmations')) {
             return view('claim-confirmations.index', [
@@ -30,12 +33,22 @@ class ClaimConfirmationController extends Controller
                     'last_changestamp' => null,
                     'last_updated_at' => null,
                 ],
+                'filters' => $filters,
+                'statusOptions' => collect(),
             ]);
         }
 
-        $query = ClaimConfirmation::query()->orderByDesc('changestamp')->orderByDesc('claim');
+        $query = $this->applyFilters(ClaimConfirmation::query(), $filters)
+            ->orderByDesc('changestamp')
+            ->orderByDesc('claim');
 
         $confirmations = $query->paginate(25)->withQueryString();
+        $statusOptions = ClaimConfirmation::query()
+            ->whereNotNull('status')
+            ->select('status')
+            ->distinct()
+            ->orderBy('status')
+            ->pluck('status');
 
         return view('claim-confirmations.index', [
             'connection' => $connection,
@@ -46,6 +59,8 @@ class ClaimConfirmationController extends Controller
                 'last_changestamp' => ClaimConfirmation::max('changestamp'),
                 'last_updated_at' => ClaimConfirmation::max('updated_at'),
             ],
+            'filters' => $filters,
+            'statusOptions' => $statusOptions,
         ]);
     }
 
@@ -58,16 +73,24 @@ class ClaimConfirmationController extends Controller
         }
 
         $validated = $request->validate([
+            ...$this->filterRules(),
             'limit' => ['nullable', 'integer', 'min:1', 'max:' . self::EXPORT_LIMIT_MAX],
         ]);
 
-        $limit = (int) ($validated['limit'] ?? self::EXPORT_LIMIT_DEFAULT);
+        $filters = $this->extractFilters($validated);
+        $limit = array_key_exists('limit', $validated) && $validated['limit'] !== null
+            ? (int) $validated['limit']
+            : null;
 
-        $rows = ClaimConfirmation::query()
+        $query = $this->applyFilters(ClaimConfirmation::query(), $filters)
             ->orderByDesc('changestamp')
-            ->orderByDesc('claim')
-            ->limit($limit)
-            ->get([
+            ->orderByDesc('claim');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        $rows = $query->get([
                 'id',
                 'claim',
                 'changestamp',
@@ -140,5 +163,34 @@ class ClaimConfirmationController extends Controller
             : "No habia cambios nuevos. Ultimo changestamp: {$result['last_changestamp']}.";
 
         return back()->with('status', $message);
+    }
+
+    private function filterRules(): array
+    {
+        return [
+            'status' => ['nullable', 'string', 'max:255'],
+            'comment_error' => ['nullable', 'in:0,1'],
+        ];
+    }
+
+    private function extractFilters(array $validated): array
+    {
+        return [
+            'status' => trim((string) ($validated['status'] ?? '')),
+            'comment_error' => ($validated['comment_error'] ?? '0') === '1',
+        ];
+    }
+
+    private function applyFilters(Builder $query, array $filters): Builder
+    {
+        if (($filters['status'] ?? '') !== '') {
+            $query->where('status', $filters['status']);
+        }
+
+        if (($filters['comment_error'] ?? false) === true) {
+            $query->where('comment', 'like', '%ERROR%');
+        }
+
+        return $query;
     }
 }
